@@ -1,0 +1,2871 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <!-- iOS PWA 與安全區域 (Safe Area) 完整設定，防止 iPhone 點擊輸入框自動放大 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="健身筆記" />
+  <meta name="theme-color" content="#020617" />
+  <!-- iPhone 加入主畫面專用 SVG 圖示 (無 Base64 編碼) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230f172a'/%3E%3Crect x='14' y='14' width='152' height='152' rx='30' fill='none' stroke='%2310b981' stroke-width='6'/%3E%3Cpath d='M45 90h90M60 66v48M120 66v48M48 74v32M132 74v32' stroke='%2338bdf8' stroke-width='10' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <title>全方位健身與運動雲端紀錄儀表板</title>
+
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 Inter 與 思源黑體 (Noto Sans TC) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans TC', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* 消除 iOS 點擊延遲與雙擊縮放，優化單手觸控體驗 */
+    * {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: #020617;
+      color: #f8fafc;
+      overscroll-behavior-y: none;
+    }
+
+    /* 隱藏橫向滑動膠囊列的捲軸，保持介面乾淨 */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* 計時器結束時的視覺閃爍動畫 */
+    @keyframes timerAlertPulse {
+      0%, 100% { background-color: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.8); }
+      50% { background-color: rgba(245, 158, 11, 0.35); border-color: rgba(245, 158, 11, 1); }
+    }
+    .timer-finished {
+      animation: timerAlertPulse 0.7s ease-in-out 4;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- ==================== 頂部固定導覽與迷你組間休息計時器 ==================== -->
+  <header class="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/90 pt-[env(safe-area-inset-top)]">
+    <div class="max-w-2xl mx-auto px-3.5 py-2.5 space-y-2">
+      <!-- 第一列：品牌標題與快捷設定按鈕 -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center text-slate-950 font-black text-base shrink-0 shadow-md shadow-sky-500/20">
+            ⚡
+          </div>
+          <div class="truncate">
+            <h1 class="text-base font-extrabold tracking-tight text-white truncate">全方位健身筆記</h1>
+            <!-- 點擊狀態徽章可直接開啟 Firebase 雲端同步設定 -->
+            <button type="button" onclick="openModal('modal-sync')" id="cloud-status-badge"
+              class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-sky-300 leading-none transition">
+              <span>📱 僅本機儲存（點此設定雲端）</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 右側快捷功能鈕 (皆具備足夠觸控高度，適配 iPhone 窄螢幕單手操作) -->
+        <div class="flex items-center gap-1 shrink-0">
+          <button type="button" onclick="openModal('modal-sync')" id="header-sync-btn"
+            class="min-h-[38px] px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-200 flex items-center gap-1 transition active:scale-95" title="Firebase 雲端同步設定">
+            <span>☁️</span>
+            <span class="hidden sm:inline">雲端</span>
+          </button>
+          <button type="button" onclick="openModal('modal-profile')" id="header-profile-btn"
+            class="min-h-[38px] px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-200 flex items-center gap-1 transition active:scale-95">
+            <span>👤</span>
+            <span id="header-weight-label">85kg</span>
+          </button>
+          <button type="button" onclick="openModal('modal-equipment')"
+            class="min-h-[38px] px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-200 flex items-center gap-1 transition active:scale-95">
+            <span>⚙️</span>
+            <span>器材</span>
+          </button>
+          <button type="button" onclick="openModal('modal-backup')"
+            class="min-h-[38px] px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-200 flex items-center gap-1 transition active:scale-95">
+            <span>💾</span>
+            <span>備份</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 第二列：單手迷你組間休息計時器 (Rest Timer) -->
+      <div id="rest-timer-bar" class="flex items-center justify-between gap-2 bg-slate-900/95 border border-slate-800 rounded-xl px-2.5 py-1.5 transition-colors">
+        <div class="flex items-center gap-2">
+          <span id="timer-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+          <span class="text-xs text-slate-400 font-medium">組間休息</span>
+          <span id="timer-display" class="font-mono text-base font-extrabold text-slate-200 tabular-nums tracking-wider">00:00</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="startRestTimer(60)" class="min-h-[34px] px-2.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 border border-slate-700/70 text-xs font-bold text-slate-200 transition active:scale-95">60s</button>
+          <button type="button" onclick="startRestTimer(90)" class="min-h-[34px] px-2.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 border border-slate-700/70 text-xs font-bold text-slate-200 transition active:scale-95">90s</button>
+          <button type="button" onclick="startRestTimer(120)" class="min-h-[34px] px-2.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 border border-slate-700/70 text-xs font-bold text-slate-200 transition active:scale-95">120s</button>
+          <button type="button" onclick="stopRestTimer()" class="min-h-[34px] px-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-xs font-bold text-rose-300 transition active:scale-95" title="停止計時">停止</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 浮動提示訊息 (Toast 取代 alert) ==================== -->
+  <div id="toast-container" class="fixed top-28 inset-x-0 z-50 flex justify-center pointer-events-none px-4"></div>
+
+  <!-- ==================== 主要內容捲動區 ==================== -->
+  <main class="max-w-2xl mx-auto px-3.5 pt-3.5 pb-32 space-y-4">
+
+    <!-- ===================================================================== -->
+    <!-- 分頁一：🏋️ 重訓紀錄 (Strength Training)                                 -->
+    <!-- ===================================================================== -->
+    <section id="tab-strength" class="space-y-4">
+
+      <!-- 1. AI 智慧推薦今日訓練部位 (可收合節省手機空間) -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950/40 border border-sky-500/30 rounded-2xl overflow-hidden shadow-lg">
+        <button type="button" onclick="toggleAiCard()" class="w-full min-h-[52px] px-4 py-3 flex items-center justify-between text-left">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-lg shrink-0">🧠</span>
+            <div class="truncate">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold uppercase tracking-wider text-sky-400">AI 恢復推薦</span>
+                <span id="ai-rec-badge" class="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[11px] font-bold">腿部優先</span>
+              </div>
+              <p id="ai-rec-summary" class="text-xs text-slate-300 truncate mt-0.5">分析過去 7 天訓練量，點擊展開推薦課表</p>
+            </div>
+          </div>
+          <span id="ai-chevron" class="text-slate-400 text-sm font-bold ml-2 transition-transform duration-200">▼</span>
+        </button>
+
+        <div id="ai-rec-body" class="px-4 pb-4 pt-1 border-t border-slate-800/80 space-y-3">
+          <p id="ai-rec-reason" class="text-xs text-slate-300 leading-relaxed"></p>
+          <!-- 3 個推薦動作卡片 -->
+          <div id="ai-rec-exercises" class="space-y-2"></div>
+          <!-- 整組加入清單按鈕 -->
+          <button type="button" onclick="applyAllRecommendedExercises()"
+            class="w-full min-h-[44px] rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-200 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.99]">
+            <span>⚡</span>
+            <span>將以上 3 個推薦動作整組加入「今日待存清單」</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. 單手快速輸入重訓動作卡片 -->
+      <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span>🏋️</span>
+            <span>記錄重訓動作</span>
+          </h2>
+          <span class="text-xs text-slate-400">單手拇指快速操作</span>
+        </div>
+
+        <!-- 步驟 A：六大肌群橫向滑動膠囊列 -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-slate-400">1. 選擇目標肌群（左右滑動）</label>
+          <div id="muscle-pills-container" class="flex overflow-x-auto no-scrollbar gap-2 py-0.5"></div>
+        </div>
+
+        <!-- 步驟 B：器材名稱自由輸入 + 自動記憶 + 橫向快選 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="equipment-input" class="text-xs font-semibold text-slate-400">2. 器材 / 動作名稱（可自由輸入或點選）</label>
+            <label class="inline-flex items-center gap-1.5 text-xs text-amber-300 cursor-pointer select-none">
+              <input type="checkbox" id="auto-save-equipment" checked class="w-4 h-4 rounded accent-amber-400" />
+              <span>自動記憶常用器材</span>
+            </label>
+          </div>
+
+          <!-- 輸入框與一鍵清除鈕 -->
+          <div class="relative flex items-center">
+            <input type="text" id="equipment-input" list="equipment-datalist"
+              placeholder="輸入或選擇台灣健身房器材名稱..."
+              oninput="handleEquipmentInputChange()"
+              class="w-full min-h-[48px] pl-3.5 pr-11 rounded-xl bg-slate-950 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 text-base font-semibold text-white placeholder-slate-500 outline-none transition" />
+            <button type="button" onclick="clearEquipmentInput()" aria-label="清除器材名稱"
+              class="absolute right-1.5 min-h-[38px] min-w-[38px] rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center text-sm font-bold">
+              ✕
+            </button>
+            <datalist id="equipment-datalist"></datalist>
+          </div>
+
+          <!-- 上次訓練重量智慧提示列 -->
+          <div id="last-record-banner" class="hidden items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div class="text-xs text-amber-200 truncate">
+              <span class="font-bold">🕒 上次：</span>
+              <span id="last-record-text">60 kg × 4 組 × 10 下</span>
+            </div>
+            <button type="button" onclick="applyLastRecordWeight()"
+              class="shrink-0 min-h-[36px] px-2.5 rounded-lg bg-amber-500 text-slate-950 font-extrabold text-xs hover:bg-amber-400 transition active:scale-95">
+              帶入上次重量
+            </button>
+          </div>
+
+          <!-- 橫向滑動器材快選膠囊列 (優先顯示 ⭐ 我的自訂器材，接著 📋 內建常見器材) -->
+          <div id="equipment-pills-container" class="flex overflow-x-auto no-scrollbar gap-1.5 py-1"></div>
+        </div>
+
+        <!-- 步驟 C：拇指友善大尺寸重量 / 組數 / 次數微調器 -->
+        <div class="space-y-3 pt-1">
+          <!-- 重量設定 (kg) -->
+          <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-300">重量 (kg) <span class="text-slate-500 font-normal">· 徒手可填 0</span></span>
+              <span id="exercise-volume-preview" class="text-xs font-semibold text-sky-400">單項總容量：2,400 kg</span>
+            </div>
+            <div class="grid grid-cols-5 gap-1.5 items-center">
+              <button type="button" onclick="adjustWeight(-5)" class="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-sm active:scale-95 transition">-5</button>
+              <button type="button" onclick="adjustWeight(-2.5)" class="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-sm active:scale-95 transition">-2.5</button>
+              <input type="text" id="weight-input" inputmode="decimal" value="60" oninput="updateLiveStrengthPreview()"
+                class="min-h-[48px] w-full rounded-xl bg-slate-900 border border-sky-500/40 text-center text-xl font-black text-white focus:border-sky-400 outline-none" />
+              <button type="button" onclick="adjustWeight(2.5)" class="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-extrabold text-sm active:scale-95 transition">+2.5</button>
+              <button type="button" onclick="adjustWeight(5)" class="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-extrabold text-sm active:scale-95 transition">+5</button>
+            </div>
+          </div>
+
+          <!-- 組數 (Sets) 與 每組次數 (Reps) -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <!-- 組數 -->
+            <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 space-y-1.5">
+              <span class="block text-xs font-bold text-slate-300 text-center">組數 (Sets)</span>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="adjustIntInput('sets-input', -1, 1)" class="min-h-[48px] min-w-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-lg active:scale-95 transition">-</button>
+                <input type="text" id="sets-input" inputmode="numeric" value="4" oninput="updateLiveStrengthPreview()"
+                  class="min-h-[48px] w-full rounded-xl bg-slate-900 border border-slate-700 text-center text-lg font-black text-white focus:border-sky-400 outline-none" />
+                <button type="button" onclick="adjustIntInput('sets-input', 1, 1)" class="min-h-[48px] min-w-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-black text-lg active:scale-95 transition">+</button>
+              </div>
+            </div>
+
+            <!-- 每組次數 -->
+            <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 space-y-1.5">
+              <span class="block text-xs font-bold text-slate-300 text-center">次數 (Reps)</span>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="adjustIntInput('reps-input', -1, 1)" class="min-h-[48px] min-w-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-lg active:scale-95 transition">-</button>
+                <input type="text" id="reps-input" inputmode="numeric" value="10" oninput="updateLiveStrengthPreview()"
+                  class="min-h-[48px] w-full rounded-xl bg-slate-900 border border-slate-700 text-center text-lg font-black text-white focus:border-sky-400 outline-none" />
+                <button type="button" onclick="adjustIntInput('reps-input', 1, 1)" class="min-h-[48px] min-w-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-black text-lg active:scale-95 transition">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步驟 D：加入今日待存清單 / 單筆直接儲存 -->
+        <div class="grid grid-cols-12 gap-2 pt-1">
+          <button type="button" onclick="addExerciseToDraft()"
+            class="col-span-8 min-h-[52px] rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-sky-500/20 transition active:scale-[0.98]">
+            <span>＋ 加入今日待存清單</span>
+          </button>
+          <button type="button" onclick="quickSaveSingleExercise()"
+            class="col-span-4 min-h-[52px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-bold text-xs flex items-center justify-center text-center px-2 transition active:scale-[0.98]">
+            <span>單筆直接存</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. 今日重訓結算儲存區 (支援 Apple Watch 實測熱量覆寫) -->
+      <div id="draft-session-card" class="bg-slate-900/95 border border-emerald-500/40 rounded-2xl p-4 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📋</span>
+            <div>
+              <h3 class="text-base font-extrabold text-white">今日待存重訓結算</h3>
+              <p class="text-xs text-slate-400">可累積多個器材後一次填入 Watch 熱量</p>
+            </div>
+          </div>
+          <span id="draft-count-badge" class="px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 text-xs font-extrabold">0 項動作</span>
+        </div>
+
+        <!-- 待存動作列表 -->
+        <div id="draft-list-container" class="space-y-2"></div>
+
+        <!-- 時間與 Apple Watch 實測熱量整合區 -->
+        <div id="draft-settlement-controls" class="hidden space-y-3 pt-2 border-t border-slate-800">
+          <div class="grid grid-cols-2 gap-2.5">
+            <!-- 實際訓練總時間 -->
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 space-y-1">
+              <label for="session-duration-input" class="block text-xs font-bold text-slate-300">⏱️ 實際總時間 (分)</label>
+              <input type="text" id="session-duration-input" inputmode="numeric" value="45" oninput="updateDraftCaloriePreview()"
+                class="w-full min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 px-3 text-lg font-extrabold text-white text-center focus:border-sky-400 outline-none" />
+            </div>
+
+            <!-- ⌚ Apple Watch 實測動態熱量 -->
+            <div class="bg-emerald-950/30 border border-emerald-500/50 rounded-xl p-2.5 space-y-1">
+              <label for="session-watch-kcal-input" class="block text-xs font-bold text-emerald-300">⌚ Watch 實測 (kcal)</label>
+              <input type="text" id="session-watch-kcal-input" inputmode="numeric" placeholder="選填手錶大卡" oninput="updateDraftCaloriePreview()"
+                class="w-full min-h-[44px] rounded-lg bg-slate-950 border border-emerald-500/60 px-2.5 text-lg font-extrabold text-emerald-300 placeholder-slate-600 text-center focus:border-emerald-400 outline-none" />
+            </div>
+          </div>
+
+          <!-- 公式預估 vs Watch 實測即時對照說明 -->
+          <div id="draft-calorie-status-box" class="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 text-xs">
+            <span class="text-slate-400">📐 公式預估：<strong id="draft-formula-kcal" class="text-slate-200">0</strong> kcal</span>
+            <span id="draft-active-source-label" class="font-bold text-amber-300">目前採用：📐 公式預估</span>
+          </div>
+
+          <!-- 儲存整次重訓按鈕 -->
+          <button type="button" onclick="saveDraftSession()"
+            class="w-full min-h-[54px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98]">
+            <span>💾 儲存整次重訓紀錄</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- 分頁二：🏐 其他運動 (Volleyball, Cardio & Sports)                      -->
+    <!-- ===================================================================== -->
+    <section id="tab-cardio" class="hidden space-y-4">
+      <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 space-y-4 shadow-xl">
+        <div>
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span>🏐</span>
+            <span>記錄其他運動與有氧</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">支援系統 MET 公式試算與 Apple Watch《體能訓練》實測覆寫</p>
+        </div>
+
+        <!-- 運動項目選擇網格 (大尺寸拇指按鈕) -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-slate-400">1. 選擇運動項目</label>
+          <div id="sport-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+        </div>
+
+        <!-- 自訂運動名稱輸入區 (僅選擇「自訂運動」時顯示) -->
+        <div id="custom-sport-box" class="hidden space-y-2.5 bg-slate-950 border border-slate-800 rounded-xl p-3">
+          <div class="flex items-center justify-between">
+            <label for="custom-sport-name" class="block text-xs font-bold text-slate-300">自訂運動名稱</label>
+            <label class="inline-flex items-center gap-1.5 text-xs text-amber-300 cursor-pointer select-none">
+              <input type="checkbox" id="auto-save-sport" checked class="w-4 h-4 rounded accent-amber-400" />
+              <span>記憶自訂運動</span>
+            </label>
+          </div>
+          <input type="text" id="custom-sport-name" placeholder="例如：籃球全場、網球、間歇跳繩..."
+            class="w-full min-h-[44px] px-3 rounded-xl bg-slate-900 border border-slate-700 text-base text-white outline-none focus:border-sky-400" />
+          <!-- 已記憶的自訂運動快選膠囊 -->
+          <div id="custom-sports-pills" class="flex overflow-x-auto no-scrollbar gap-1.5"></div>
+        </div>
+
+        <!-- 運動時間設定 (數字微調 + 滑桿 + 常用快選) -->
+        <div class="space-y-2">
+          <label for="sport-duration-input" class="block text-xs font-semibold text-slate-400">2. 運動時間 (分鐘)</label>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="adjustIntInput('sport-duration-input', -10, 5); syncSportDurationSlider(); updateSportCaloriePreview();"
+              class="min-h-[48px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-extrabold text-sm text-slate-200 active:scale-95">-10分</button>
+            <input type="text" id="sport-duration-input" inputmode="numeric" value="60" oninput="syncSportDurationSlider(); updateSportCaloriePreview();"
+              class="min-h-[48px] w-full rounded-xl bg-slate-950 border border-slate-700 text-center text-xl font-black text-white focus:border-sky-400 outline-none" />
+            <button type="button" onclick="adjustIntInput('sport-duration-input', 10, 5); syncSportDurationSlider(); updateSportCaloriePreview();"
+              class="min-h-[48px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-extrabold text-sm text-sky-300 active:scale-95">+10分</button>
+          </div>
+          <!-- 時間滑桿 -->
+          <input type="range" id="sport-duration-slider" min="10" max="180" step="5" value="60"
+            oninput="setSportDuration(this.value)"
+            class="w-full accent-sky-400 cursor-pointer h-2 bg-slate-800 rounded-lg" />
+          <!-- 常用時間快選膠囊 -->
+          <div class="flex overflow-x-auto no-scrollbar gap-1.5 pt-0.5">
+            <button type="button" onclick="setSportDuration(30)" class="min-h-[38px] px-3 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">30 分</button>
+            <button type="button" onclick="setSportDuration(45)" class="min-h-[38px] px-3 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">45 分</button>
+            <button type="button" onclick="setSportDuration(60)" class="min-h-[38px] px-3 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">60 分</button>
+            <button type="button" onclick="setSportDuration(90)" class="min-h-[38px] px-3 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">90 分</button>
+            <button type="button" onclick="setSportDuration(120)" class="min-h-[38px] px-3 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">120 分</button>
+          </div>
+        </div>
+
+        <!-- 體感強度選擇 -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-slate-400">3. 體感強度調整</label>
+          <div class="grid grid-cols-3 gap-2" id="intensity-buttons">
+            <button type="button" data-mult="0.85" onclick="selectSportIntensity(0.85)"
+              class="intensity-btn min-h-[44px] rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 transition">輕鬆 (×0.85)</button>
+            <button type="button" data-mult="1.0" onclick="selectSportIntensity(1.0)"
+              class="intensity-btn min-h-[44px] rounded-xl bg-sky-500/20 border border-sky-400 text-xs font-extrabold text-sky-200 transition">標準 (×1.0)</button>
+            <button type="button" data-mult="1.15" onclick="selectSportIntensity(1.15)"
+              class="intensity-btn min-h-[44px] rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 transition">高強度 (×1.15)</button>
+          </div>
+        </div>
+
+        <!-- 4. 公式預估 vs Apple Watch 實測並排對照區 -->
+        <div class="space-y-2 pt-1">
+          <label class="block text-xs font-semibold text-slate-400">4. 動態消耗熱量 (kcal)</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <!-- 左側：公式預估 -->
+            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between">
+              <span class="text-xs font-bold text-slate-400">📐 公式預估熱量</span>
+              <div class="my-1.5">
+                <span id="sport-formula-kcal" class="text-2xl font-black text-slate-200 tabular-nums">425</span>
+                <span class="text-xs text-slate-400 font-semibold ml-0.5">kcal</span>
+              </div>
+              <span class="text-[11px] text-slate-500">依體重與 MET 推算</span>
+            </div>
+
+            <!-- 右側：Apple Watch 實測手動輸入 -->
+            <div class="bg-emerald-950/30 border border-emerald-500/50 rounded-2xl p-3 flex flex-col justify-between">
+              <label for="sport-watch-kcal-input" class="text-xs font-bold text-emerald-300">⌚ Watch 實測 (kcal)</label>
+              <input type="text" id="sport-watch-kcal-input" inputmode="numeric" placeholder="輸入手錶大卡" oninput="updateSportCaloriePreview()"
+                class="my-1 w-full min-h-[44px] rounded-xl bg-slate-950 border border-emerald-500/60 px-2 text-lg font-black text-emerald-300 placeholder-slate-600 text-center focus:border-emerald-400 outline-none" />
+              <span id="sport-source-hint" class="text-[11px] text-emerald-400/90 font-medium">留空則採用公式預估</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 選填備註 -->
+        <div>
+          <input type="text" id="sport-note-input" placeholder="備註（選填，例如：週二晚間排球暢打 4 局）"
+            class="w-full min-h-[44px] px-3.5 rounded-xl bg-slate-950 border border-slate-800 text-base text-slate-200 placeholder-slate-500 focus:border-sky-400 outline-none" />
+        </div>
+
+        <!-- 儲存按鈕 -->
+        <button type="button" onclick="saveSportLog()"
+          class="w-full min-h-[54px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98]">
+          <span>💾 儲存運動紀錄</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- 分頁三：📊 數據歷史與 Watch 熱量補填                                   -->
+    <!-- ===================================================================== -->
+    <section id="tab-history" class="hidden space-y-4">
+
+      <!-- 1. 本週運動數據總覽 KPI (2x2 網格) -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5">
+          <span class="text-xs font-semibold text-slate-400">🔥 本週消耗熱量</span>
+          <div class="mt-1 flex items-baseline gap-1">
+            <span id="stat-week-kcal" class="text-2xl font-black text-emerald-400 tabular-nums">0</span>
+            <span class="text-xs text-slate-400 font-bold">kcal</span>
+          </div>
+          <p id="stat-watch-ratio" class="text-[11px] text-slate-500 mt-1">⌚ Watch 實測佔 0%</p>
+        </div>
+
+        <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5">
+          <span class="text-xs font-semibold text-slate-400">📅 本週運動頻率</span>
+          <div class="mt-1 flex items-baseline gap-1">
+            <span id="stat-week-days" class="text-2xl font-black text-sky-400 tabular-nums">0</span>
+            <span class="text-xs text-slate-400 font-bold">天 /</span>
+            <span id="stat-week-sessions" class="text-base font-extrabold text-slate-200 tabular-nums">0</span>
+            <span class="text-xs text-slate-400 font-bold">筆</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">近 7 天累積活躍紀錄</p>
+        </div>
+
+        <div class="col-span-2 bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-semibold text-slate-400">🏋️ 本週累計重訓總重量 (Volume)</span>
+            <div class="mt-0.5 flex items-baseline gap-1.5">
+              <span id="stat-week-volume" class="text-2xl font-black text-white tabular-nums">0</span>
+              <span class="text-xs text-slate-400 font-bold">kg</span>
+            </div>
+          </div>
+          <div class="text-right text-xs text-slate-400">
+            <div>總組數：<strong id="stat-week-sets" class="text-sky-300">0</strong> 組</div>
+            <div class="mt-0.5">持續漸進超負荷 💪</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 近 14 天六大肌群訓練平衡度 -->
+      <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-extrabold text-white">⚖️ 近 14 天肌群訓練平衡度</h3>
+          <span class="text-[11px] text-slate-400">依總組數與容量評估</span>
+        </div>
+        <div id="muscle-balance-bars" class="space-y-2.5"></div>
+      </div>
+
+      <!-- 3. 歷史紀錄清單 (支援篩選與事後補填 Watch 熱量) -->
+      <div class="space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="text-base font-extrabold text-white">📜 運動與重訓歷史紀錄</h3>
+          <span id="history-total-count" class="text-xs text-slate-400">共 0 筆</span>
+        </div>
+
+        <!-- 篩選膠囊列 -->
+        <div class="flex overflow-x-auto no-scrollbar gap-1.5 py-0.5" id="history-filter-pills">
+          <button type="button" data-filter="all" onclick="setHistoryFilter('all')" class="hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-sky-500 text-slate-950 font-extrabold text-xs shrink-0">全部紀錄</button>
+          <button type="button" data-filter="strength" onclick="setHistoryFilter('strength')" class="hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs shrink-0">🏋️ 重訓</button>
+          <button type="button" data-filter="cardio" onclick="setHistoryFilter('cardio')" class="hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs shrink-0">🏐 其他運動</button>
+          <button type="button" data-filter="watch" onclick="setHistoryFilter('watch')" class="hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs shrink-0">⌚ Watch 實測</button>
+          <button type="button" data-filter="formula" onclick="setHistoryFilter('formula')" class="hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs shrink-0">📐 待補 Watch 熱量</button>
+        </div>
+
+        <!-- 紀錄卡片列表 -->
+        <div id="history-list-container" class="space-y-2.5"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ==================== 底部固定拇指導覽列 (Bottom Tab Bar) ==================== -->
+  <nav class="fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 pb-[env(safe-area-inset-bottom)]">
+    <div class="max-w-2xl mx-auto grid grid-cols-3 min-h-[64px]">
+      <button type="button" onclick="switchTab('strength')" id="nav-btn-strength"
+        class="nav-tab-btn flex flex-col items-center justify-center gap-0.5 py-2 text-sky-400 font-extrabold transition active:scale-95">
+        <span class="text-xl leading-none">🏋️</span>
+        <span class="text-xs">重訓紀錄</span>
+      </button>
+      <button type="button" onclick="switchTab('cardio')" id="nav-btn-cardio"
+        class="nav-tab-btn flex flex-col items-center justify-center gap-0.5 py-2 text-slate-400 font-semibold transition active:scale-95">
+        <span class="text-xl leading-none">🏐</span>
+        <span class="text-xs">其他運動</span>
+      </button>
+      <button type="button" onclick="switchTab('history')" id="nav-btn-history"
+        class="nav-tab-btn flex flex-col items-center justify-center gap-0.5 py-2 text-slate-400 font-semibold transition active:scale-95">
+        <span class="text-xl leading-none">📊</span>
+        <span class="text-xs">數據歷史</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========================================================================= -->
+  <!-- 彈窗一：👤 個人身體參數設定 (Profile Modal)                                -->
+  <!-- ========================================================================= -->
+  <div id="modal-profile" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white">👤 個人身體參數設定</h3>
+        <button type="button" onclick="closeModal('modal-profile')" class="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+      <p class="text-xs text-slate-400">參數用於計算基礎代謝率 (BMR) 與公式預估動態熱量，Apple Watch 實測值仍具有最高優先權。</p>
+
+      <div class="grid grid-cols-3 gap-2.5">
+        <div class="space-y-1">
+          <label for="profile-weight" class="block text-xs font-bold text-slate-300">體重 (kg)</label>
+          <input type="text" id="profile-weight" inputmode="decimal" value="85"
+            class="w-full min-h-[48px] rounded-xl bg-slate-950 border border-slate-700 text-center text-lg font-black text-white focus:border-sky-400 outline-none" />
+        </div>
+        <div class="space-y-1">
+          <label for="profile-height" class="block text-xs font-bold text-slate-300">身高 (cm)</label>
+          <input type="text" id="profile-height" inputmode="numeric" value="186"
+            class="w-full min-h-[48px] rounded-xl bg-slate-950 border border-slate-700 text-center text-lg font-black text-white focus:border-sky-400 outline-none" />
+        </div>
+        <div class="space-y-1">
+          <label for="profile-age" class="block text-xs font-bold text-slate-300">年齡 (歲)</label>
+          <input type="text" id="profile-age" inputmode="numeric" value="43"
+            class="w-full min-h-[48px] rounded-xl bg-slate-950 border border-slate-700 text-center text-lg font-black text-white focus:border-sky-400 outline-none" />
+        </div>
+      </div>
+
+      <div id="profile-bmr-preview" class="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300"></div>
+
+      <button type="button" onclick="saveProfile()"
+        class="w-full min-h-[50px] rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-base transition">
+        儲存身體參數
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 彈窗二：⚙️ 台灣健身房器材庫管理 (Equipment Manager Modal)                  -->
+  <!-- ========================================================================= -->
+  <div id="modal-equipment" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="w-full max-w-lg max-h-[88vh] flex flex-col bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 pb-[calc(env(safe-area-inset-bottom)+16px)] space-y-3.5 shadow-2xl">
+      <div class="flex items-center justify-between shrink-0">
+        <h3 class="text-lg font-extrabold text-white">⚙️ 健身房器材庫管理</h3>
+        <button type="button" onclick="closeModal('modal-equipment')" class="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+
+      <!-- 肌群切換列 -->
+      <div id="modal-eq-muscle-tabs" class="flex overflow-x-auto no-scrollbar gap-1.5 shrink-0 py-0.5"></div>
+
+      <!-- 批次新增自訂器材 -->
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2 shrink-0">
+        <label for="batch-equipment-textarea" class="block text-xs font-bold text-amber-300">
+          ➕ 批次新增自訂器材至「<span id="modal-eq-current-muscle">胸部</span>」
+        </label>
+        <textarea id="batch-equipment-textarea" rows="2" placeholder="可輸入多個器材，用換行或逗號分隔&#10;例如：Cybex 坐姿胸推機, 悍馬機上斜胸推"
+          class="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-base text-white placeholder-slate-500 focus:border-amber-400 outline-none"></textarea>
+        <button type="button" onclick="batchAddCustomEquipment()"
+          class="w-full min-h-[42px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition">
+          新增至我的自訂器材庫
+        </button>
+      </div>
+
+      <!-- 可捲動器材清單 -->
+      <div class="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div>
+          <h4 class="text-xs font-extrabold text-amber-300 mb-1.5">⭐ 我的自訂器材（點擊可改名或設定預設重量）</h4>
+          <div id="modal-custom-eq-list" class="space-y-1.5"></div>
+        </div>
+        <div>
+          <h4 class="text-xs font-extrabold text-slate-400 mb-1.5">📋 內建台灣健身房常見器材</h4>
+          <div id="modal-builtin-eq-list" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 彈窗三：💾 備份與 iPhone 加入主畫面教學 (Backup & PWA Guide Modal)          -->
+  <!-- ========================================================================= -->
+  <div id="modal-backup" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white">💾 資料備份與 iPhone 設定</h3>
+        <button type="button" onclick="closeModal('modal-backup')" class="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+
+      <!-- iPhone 加入主畫面教學卡片 -->
+      <div class="bg-sky-950/40 border border-sky-500/30 rounded-2xl p-3.5 space-y-1.5">
+        <h4 class="text-xs font-extrabold text-sky-300">📱 如何將此網頁變成 iPhone 獨立 App？</h4>
+        <ol class="text-xs text-slate-300 space-y-1 list-decimal list-inside leading-relaxed">
+          <li>使用 iPhone 的 <strong>Safari</strong> 開啟本網頁。</li>
+          <li>點擊底部工具列中央的 <strong>「分享」按鈕（方框向上箭頭）</strong>。</li>
+          <li>往下滑選擇 <strong>「加入主畫面」</strong>，即可在桌面以全螢幕 App 模式開啟！</li>
+        </ol>
+      </div>
+
+      <!-- iPhone 一鍵複製文字備份 (方便貼入 Apple 備忘錄) -->
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+        <h4 class="text-xs font-extrabold text-emerald-300">📋 iPhone 快速文字備份（可貼到 Apple 備忘錄）</h4>
+        <button type="button" onclick="copyBackupTextToClipboard()"
+          class="w-full min-h-[46px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition active:scale-[0.98]">
+          📋 一鍵複製全部備份文字
+        </button>
+
+        <div class="pt-1 space-y-1.5">
+          <label for="paste-backup-textarea" class="block text-xs text-slate-400">貼上備份文字還原：</label>
+          <textarea id="paste-backup-textarea" rows="2" placeholder="在此貼上先前複製的備份 JSON 文字..."
+            class="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-base text-white placeholder-slate-500 outline-none focus:border-sky-400"></textarea>
+          <button type="button" onclick="restoreFromPastedText()"
+            class="w-full min-h-[42px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs transition">
+            從貼上文字還原資料
+          </button>
+        </div>
+      </div>
+
+      <!-- JSON 檔案匯出 / 匯入 -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <button type="button" onclick="exportJsonFile()"
+          class="min-h-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-extrabold text-white transition">
+          ⬇️ 下載 .json 備份檔
+        </button>
+        <label class="min-h-[46px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-extrabold text-white flex items-center justify-center cursor-pointer transition">
+          <span>⬆️ 匯入 .json 檔案</span>
+          <input type="file" accept=".json,application/json" onchange="importJsonFile(event)" class="hidden" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 彈窗四：⌚ 事後補填 / 修改 Apple Watch 實測熱量 (Edit Calories Modal)        -->
+  <!-- ========================================================================= -->
+  <div id="modal-edit-kcal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white">⌚ 補填 / 修改實測熱量</h3>
+        <button type="button" onclick="closeModal('modal-edit-kcal')" class="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+
+      <div id="edit-kcal-target-info" class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 space-y-1"></div>
+
+      <div class="space-y-1.5">
+        <label for="edit-kcal-input" class="block text-xs font-bold text-emerald-300">輸入 Apple Watch 實測動態熱量 (kcal)</label>
+        <input type="text" id="edit-kcal-input" inputmode="numeric" placeholder="例如：340"
+          class="w-full min-h-[52px] rounded-xl bg-slate-950 border border-emerald-500/60 text-center text-2xl font-black text-emerald-300 focus:border-emerald-400 outline-none" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5">
+        <button type="button" onclick="revertRecordToFormula()"
+          class="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300 transition">
+          📐 恢復為公式預估
+        </button>
+        <button type="button" onclick="saveEditedWatchCalories()"
+          class="min-h-[48px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm transition">
+          ⌚ 套用 Watch 實測
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 彈窗五：☁️ Firebase Realtime Database 雲端同步設定 (Cloud Sync Modal)       -->
+  <!-- ========================================================================= -->
+  <div id="modal-sync" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white">☁️ Firebase 雲端即時同步</h3>
+        <button type="button" onclick="closeModal('modal-sync')" class="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+
+      <!-- 目前連線狀態卡片 -->
+      <div id="sync-modal-status-card" class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-400">目前同步狀態</span>
+          <span id="sync-modal-badge" class="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-extrabold">📱 僅本機儲存</span>
+        </div>
+        <p id="sync-modal-detail" class="text-xs text-slate-400 leading-relaxed">
+          設定 Firebase Realtime Database 網址與專屬個人密鑰後，iPhone 與 MacBook Air 將自動即時雙向同步。
+        </p>
+      </div>
+
+      <!-- 連線參數表單 -->
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label for="sync-db-url-input" class="block text-xs font-bold text-slate-300">1. Firebase Database URL <span class="text-rose-400">*</span></label>
+          <input type="url" id="sync-db-url-input" placeholder="https://你的專案-default-rtdb.asia-southeast1.firebasedatabase.app"
+            class="w-full min-h-[46px] px-3 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:border-sky-400 outline-none" />
+        </div>
+
+        <div class="space-y-1">
+          <div class="flex items-center justify-between">
+            <label for="sync-key-input" class="block text-xs font-bold text-slate-300">2. 專屬個人同步密鑰 (Sync Key) <span class="text-rose-400">*</span></label>
+            <button type="button" onclick="generateRandomSyncKey()" class="text-xs font-bold text-sky-400 hover:text-sky-300">🎲 隨機產生安全密鑰</button>
+          </div>
+          <input type="text" id="sync-key-input" placeholder="例如：jianzhi_fit_8829（至少 8 碼英數字）"
+            class="w-full min-h-[46px] px-3 rounded-xl bg-slate-950 border border-slate-700 text-base font-bold text-emerald-300 placeholder-slate-500 focus:border-emerald-400 outline-none" />
+          <p class="text-[11px] text-slate-400">資料將隔離儲存於雲端路徑 <code class="text-sky-300">/fitness_tracker/{你的密鑰}</code> 下，兩台裝置輸入相同密鑰即可互通。</p>
+        </div>
+
+        <!-- 進階選填欄位 (API Key / Project ID) -->
+        <details class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <summary class="text-xs font-bold text-slate-400 cursor-pointer select-none">進階選項：API Key 與 Project ID（選填）</summary>
+          <div class="mt-2.5 space-y-2.5">
+            <div class="space-y-1">
+              <label for="sync-apikey-input" class="block text-[11px] font-semibold text-slate-400">Firebase API Key</label>
+              <input type="text" id="sync-apikey-input" placeholder="AIzaSy..."
+                class="w-full min-h-[40px] px-3 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-600 outline-none" />
+            </div>
+            <div class="space-y-1">
+              <label for="sync-projectid-input" class="block text-[11px] font-semibold text-slate-400">Firebase Project ID</label>
+              <input type="text" id="sync-projectid-input" placeholder="my-fitness-app"
+                class="w-full min-h-[40px] px-3 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-600 outline-none" />
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 主要連線與分享按鈕 -->
+      <div class="space-y-2">
+        <button type="button" onclick="saveAndConnectCloud()"
+          class="w-full min-h-[50px] rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-sm transition active:scale-[0.98]">
+          ☁️ 儲存設定並啟動即時同步
+        </button>
+
+        <button type="button" onclick="copySyncShareUrl()"
+          class="w-full min-h-[44px] rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition active:scale-[0.98]">
+          🔗 複製「免輸入密鑰」快速同步網址（傳給 iPhone / Mac）
+        </button>
+      </div>
+
+      <!-- 手動同步與覆蓋工具列 -->
+      <div class="pt-3 border-t border-slate-800 space-y-2">
+        <span class="block text-xs font-bold text-slate-400">手動資料同步工具</span>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="manualMergeSync()"
+            class="min-h-[42px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition">
+            🔄 立即雙向合併
+          </button>
+          <button type="button" onclick="disconnectFirebaseSync()"
+            class="min-h-[42px] rounded-xl bg-slate-800 hover:bg-rose-500/20 border border-slate-700 text-xs font-bold text-rose-300 transition">
+            🔌 斷開雲端連線
+          </button>
+          <button type="button" id="btn-force-upload" onclick="handleForceCloudAction('upload')"
+            class="min-h-[42px] rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] font-bold text-amber-300 transition">
+            ⬆️ 本機完整覆蓋雲端
+          </button>
+          <button type="button" id="btn-force-download" onclick="handleForceCloudAction('download')"
+            class="min-h-[42px] rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] font-bold text-sky-300 transition">
+            ⬇️ 雲端完整覆蓋本機
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 載入官方 Firebase v10.14.1 Modular SDK ==================== -->
+  <script type="module">
+    import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getDatabase, ref, set, update, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+    window.__firebaseRTDB = {
+      initializeApp,
+      getApps,
+      deleteApp,
+      getDatabase,
+      ref,
+      set,
+      update,
+      get,
+      onValue,
+      off
+    };
+
+    window.dispatchEvent(new Event('firebase-sdk-ready'));
+  </script>
+
+  <!-- ==================== 核心應用程式邏輯 (JavaScript) ==================== -->
+  <script>
+    /**
+     * 0. 預設 Firebase 設定區 (可直接在此填入您的 Firebase 專案參數，或於網頁「☁️ 雲端」視窗動態設定)
+     */
+    const DEFAULT_FIREBASE_CONFIG = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+      defaultSyncKey: "" // 可預填個人專屬同步密鑰，例如 "jianzhi_fit_8829"
+    };
+
+    /**
+     * 1. 台灣健身房內建常見器材資料庫 (超過 50 項，依六大肌群分類)
+     */
+    const BUILTIN_EQUIPMENT = {
+      '胸部': [
+        '槓鈴平板臥推', '槓鈴上斜臥推', '啞鈴平板臥推', '啞鈴上斜臥推',
+        '機械式坐姿胸推機', '機械式上斜胸推機', '史密斯機平板臥推', '史密斯機上斜臥推',
+        '蝴蝶機夾胸 (Pec Deck)', '龍門架繩索夾胸', '雙槓撐體 (胸肌主導)', '啞鈴平板飛鳥'
+      ],
+      '背部': [
+        '滑輪下拉 (寬握)', '滑輪下拉 (反手/對握)', '坐姿水平划船機', '坐姿纜繩划船',
+        '槓鈴俯身划船', '單臂啞鈴划船', 'T字槓划船機', '輔助引體向上機',
+        '徒手引體向上', '直臂纜繩下壓', '傳統硬舉', '羅馬尼亞硬舉 (RDL)'
+      ],
+      '腿部': [
+        '槓鈴深蹲', '史密斯機深蹲', '腿推機 (Leg Press)', '哈克深蹲機 (Hack Squat)',
+        '坐姿腿屈伸機 (股四頭)', '俯臥腿後勾機 (股二頭)', '坐姿腿後勾機',
+        '保加利亞分腿蹲', '啞鈴弓箭步', '髖外展機 (臀中肌)', '臀推機 (Hip Thrust)', '站姿提踵機 (小腿)'
+      ],
+      '肩部': [
+        '啞鈴坐姿肩推', '槓鈴站姿肩推 (軍式推舉)', '機械式坐姿肩推機', '史密斯機肩推',
+        '啞鈴側平舉', '機械式側平舉機', '纜繩單臂側平舉', '蝴蝶機反向飛鳥 (後三角)',
+        '纜繩面拉 (Face Pull)', '啞鈴俯身飛鳥', '阿諾肩推'
+      ],
+      '手臂': [
+        'EZ槓二頭彎舉', '啞鈴交替二頭彎舉', '斜板牧師椅彎舉機', '啞鈴錘式彎舉',
+        '纜繩二頭彎舉', '纜繩三頭下壓 (直桿/繩索)', '啞鈴頸後臂屈伸', '仰臥槓鈴臂屈伸 (碎顱者)',
+        '機械式三頭下壓機', '窄距槓鈴臥推'
+      ],
+      '核心與功能性': [
+        '棒式支撐 (Plank)', '懸垂抬腿', '羅馬椅抬腿', '捲腹機 (Ab Crunch)',
+        '纜繩跪姿捲腹', '健腹輪滾動', '俄羅斯轉體', '農夫走路 (負重行走)',
+        '背伸展機 (下背/豎脊肌)', '壺鈴擺盪 (Kettlebell Swing)'
+      ]
+    };
+
+    const MUSCLE_GROUPS = Object.keys(BUILTIN_EQUIPMENT);
+
+    /**
+     * 2. 其他運動 MET 資料庫 (排球、羽球、有氧等)
+     */
+    const SPORT_CATALOG = [
+      { id: 'volleyball_comp', name: '排球（比賽/高強度）', icon: '🏐', met: 6.0 },
+      { id: 'volleyball_casual', name: '排球（休閒/練球）', icon: '🏐', met: 4.0 },
+      { id: 'badminton_single', name: '羽球（單打）', icon: '🏸', met: 6.5 },
+      { id: 'badminton_double', name: '羽球（雙打）', icon: '🏸', met: 5.0 },
+      { id: 'running', name: '慢跑 / 路跑', icon: '🏃', met: 8.5 },
+      { id: 'incline_walk', name: '跑步機坡度快走', icon: '🚶', met: 5.5 },
+      { id: 'cycling', name: '飛輪有氧', icon: '🚴', met: 7.0 },
+      { id: 'swimming', name: '游泳', icon: '🏊', met: 6.5 },
+      { id: 'hiking', name: '登山健行', icon: '⛰️', met: 6.0 },
+      { id: 'custom_sport', name: '自訂其他運動', icon: '⚡', met: 5.5 }
+    ];
+
+    /**
+     * 3. 應用程式狀態與 localStorage 儲存鍵值
+     */
+    const STORAGE_KEYS = {
+      PROFILE: 'ft_ios_profile_v1',
+      CUSTOM_EQ: 'ft_ios_custom_eq_v1',
+      CUSTOM_SPORTS: 'ft_ios_custom_sports_v1',
+      LOGS: 'ft_ios_logs_v1',
+      DRAFT: 'ft_ios_draft_v1',
+      INIT: 'ft_ios_seeded_v1',
+      CLOUD_CFG: 'ft_ios_cloud_cfg_v1'
+    };
+
+    let state = {
+      profile: { weight: 85, height: 186, age: 43 },
+      customEquipment: {
+        '胸部': [], '背部': [], '腿部': [], '肩部': [], '手臂': [], '核心與功能性': []
+      },
+      customSports: [],
+      logs: [],
+      draftSession: [],
+      selectedMuscle: '胸部',
+      selectedSportId: 'volleyball_comp',
+      selectedIntensity: 1.0,
+      historyFilter: 'all',
+      modalEqMuscle: '胸部',
+      editingLogId: null,
+      aiExpanded: true,
+      cloudConfig: {
+        enabled: false,
+        databaseURL: DEFAULT_FIREBASE_CONFIG.databaseURL.includes('YOUR_PROJECT_ID') ? '' : DEFAULT_FIREBASE_CONFIG.databaseURL,
+        apiKey: DEFAULT_FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY' ? '' : DEFAULT_FIREBASE_CONFIG.apiKey,
+        projectId: DEFAULT_FIREBASE_CONFIG.projectId === 'YOUR_PROJECT_ID' ? '' : DEFAULT_FIREBASE_CONFIG.projectId,
+        syncKey: DEFAULT_FIREBASE_CONFIG.defaultSyncKey || ''
+      }
+    };
+
+    // Firebase 即時連線參考變數
+    let rtdbInstance = null;
+    let activeRootRef = null;
+    let isCloudConnected = false;
+
+    // 組間休息計時器變數
+    let timerInterval = null;
+    let timerRemaining = 0;
+    let audioCtx = null;
+
+    /**
+     * 4. 初始化應用程式
+     */
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStateFromStorage();
+      applyUrlSyncKeyIfPresent();
+      seedInitialDemoDataIfNeeded();
+      renderProfileUI();
+      renderMusclePills();
+      renderEquipmentControls();
+      renderDraftSession();
+      renderAiRecommendation();
+      renderSportGrid();
+      renderCustomSportsPills();
+      updateSportCaloriePreview();
+      renderHistoryAndStats();
+
+      if (window.__firebaseRTDB) {
+        initFirebaseCloudSync();
+      } else {
+        window.addEventListener('firebase-sdk-ready', () => initFirebaseCloudSync(), { once: true });
+      }
+    });
+
+    function loadStateFromStorage() {
+      try {
+        const savedProfile = JSON.parse(localStorage.getItem(STORAGE_KEYS.PROFILE));
+        if (savedProfile && savedProfile.weight) state.profile = savedProfile;
+
+        const savedCustomEq = JSON.parse(localStorage.getItem(STORAGE_KEYS.CUSTOM_EQ));
+        if (savedCustomEq) {
+          MUSCLE_GROUPS.forEach(m => {
+            state.customEquipment[m] = Array.isArray(savedCustomEq[m]) ? savedCustomEq[m] : [];
+          });
+        }
+
+        const savedCustomSports = JSON.parse(localStorage.getItem(STORAGE_KEYS.CUSTOM_SPORTS));
+        if (Array.isArray(savedCustomSports)) state.customSports = savedCustomSports;
+
+        const savedLogs = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS));
+        if (Array.isArray(savedLogs)) state.logs = savedLogs;
+
+        const savedDraft = JSON.parse(localStorage.getItem(STORAGE_KEYS.DRAFT));
+        if (Array.isArray(savedDraft)) state.draftSession = savedDraft;
+
+        const savedCloudCfg = JSON.parse(localStorage.getItem(STORAGE_KEYS.CLOUD_CFG));
+        if (savedCloudCfg && typeof savedCloudCfg === 'object') {
+          state.cloudConfig = { ...state.cloudConfig, ...savedCloudCfg };
+        }
+      } catch (err) {
+        console.error('讀取本機資料失敗:', err);
+      }
+    }
+
+    /**
+     * 支援透過網址參數 ?syncKey=xxx 快速帶入同步密鑰（方便從 Mac 傳連結給 iPhone 免手動打字）
+     */
+    function applyUrlSyncKeyIfPresent() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlKey = params.get('syncKey');
+        const urlDb = params.get('dbUrl');
+        let changed = false;
+
+        if (urlKey && urlKey.trim()) {
+          state.cloudConfig.syncKey = sanitizeSyncKey(urlKey.trim());
+          if (state.cloudConfig.databaseURL) state.cloudConfig.enabled = true;
+          changed = true;
+        }
+        if (urlDb && urlDb.trim().startsWith('https://')) {
+          state.cloudConfig.databaseURL = urlDb.trim();
+          if (state.cloudConfig.syncKey) state.cloudConfig.enabled = true;
+          changed = true;
+        }
+        if (changed) {
+          localStorage.setItem(STORAGE_KEYS.CLOUD_CFG, JSON.stringify(state.cloudConfig));
+        }
+      } catch (e) {}
+    }
+
+    function persistAllState() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(state.profile));
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_EQ, JSON.stringify(state.customEquipment));
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_SPORTS, JSON.stringify(state.customSports));
+        localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(state.logs));
+        localStorage.setItem(STORAGE_KEYS.DRAFT, JSON.stringify(state.draftSession));
+        localStorage.setItem(STORAGE_KEYS.CLOUD_CFG, JSON.stringify(state.cloudConfig));
+      } catch (err) {
+        showToast('本機儲存空間已滿，建議先匯出備份', 'error');
+      }
+    }
+
+    /**
+     * 初次開啟時建立數筆貼近真實情境的示範紀錄（方便體驗 AI 推薦與 Watch 熱量對照）
+     */
+    function seedInitialDemoDataIfNeeded() {
+      if (localStorage.getItem(STORAGE_KEYS.INIT)) return;
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      state.customEquipment['胸部'] = [
+        { name: 'Cybex 坐姿胸推機', defaultWeight: 65 }
+      ];
+
+      state.logs = [
+        {
+          id: 'demo-1',
+          type: 'strength',
+          timestamp: now - 1 * dayMs,
+          muscle: '胸部',
+          equipment: '槓鈴平板臥推',
+          weight: 70,
+          sets: 4,
+          reps: 8,
+          duration: 25,
+          calories: 175,
+          formulaCalories: 162,
+          calorieSource: 'watch'
+        },
+        {
+          id: 'demo-2',
+          type: 'strength',
+          timestamp: now - 1 * dayMs,
+          muscle: '手臂',
+          equipment: '纜繩三頭下壓 (直桿/繩索)',
+          weight: 25,
+          sets: 4,
+          reps: 12,
+          duration: 20,
+          calories: 145,
+          formulaCalories: 130,
+          calorieSource: 'watch'
+        },
+        {
+          id: 'demo-3',
+          type: 'cardio',
+          timestamp: now - 2 * dayMs,
+          sportName: '排球（比賽/高強度）',
+          duration: 90,
+          intensity: 1.15,
+          calories: 710,
+          formulaCalories: 733,
+          calorieSource: 'watch',
+          note: '週日排球暢打'
+        },
+        {
+          id: 'demo-4',
+          type: 'strength',
+          timestamp: now - 4 * dayMs,
+          muscle: '背部',
+          equipment: '滑輪下拉 (寬握)',
+          weight: 55,
+          sets: 4,
+          reps: 10,
+          duration: 30,
+          calories: 191,
+          formulaCalories: 191,
+          calorieSource: 'formula'
+        }
+      ];
+
+      localStorage.setItem(STORAGE_KEYS.INIT, '1');
+      persistAllState();
+    }
+
+    /**
+     * 5. 分頁切換與共用 UI 工具
+     */
+    function switchTab(tabName) {
+      ['strength', 'cardio', 'history'].forEach(t => {
+        const section = document.getElementById(`tab-${t}`);
+        const btn = document.getElementById(`nav-btn-${t}`);
+        if (t === tabName) {
+          section.classList.remove('hidden');
+          btn.classList.remove('text-slate-400', 'font-semibold');
+          btn.classList.add('text-sky-400', 'font-extrabold');
+        } else {
+          section.classList.add('hidden');
+          btn.classList.add('text-slate-400', 'font-semibold');
+          btn.classList.remove('text-sky-400', 'font-extrabold');
+        }
+      });
+
+      if (tabName === 'history') {
+        renderHistoryAndStats();
+      } else if (tabName === 'cardio') {
+        updateSportCaloriePreview();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function openModal(modalId) {
+      const el = document.getElementById(modalId);
+      if (!el) return;
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+
+      if (modalId === 'modal-profile') {
+        document.getElementById('profile-weight').value = state.profile.weight;
+        document.getElementById('profile-height').value = state.profile.height;
+        document.getElementById('profile-age').value = state.profile.age;
+        updateProfileBmrPreview();
+      } else if (modalId === 'modal-equipment') {
+        state.modalEqMuscle = state.selectedMuscle;
+        renderEquipmentModal();
+      } else if (modalId === 'modal-sync') {
+        populateSyncModalFields();
+      }
+    }
+
+    function closeModal(modalId) {
+      const el = document.getElementById(modalId);
+      if (!el) return;
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colorClass = type === 'error'
+        ? 'bg-rose-600 text-white border-rose-400'
+        : type === 'watch'
+          ? 'bg-emerald-600 text-white border-emerald-300'
+          : 'bg-slate-800 text-white border-sky-400/60';
+
+      toast.className = `px-4 py-2.5 rounded-2xl border shadow-2xl text-xs font-extrabold tracking-wide transition-all duration-300 transform translate-y-0 opacity-100 ${colorClass}`;
+      toast.textContent = message;
+      container.innerHTML = '';
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2600);
+    }
+
+    /**
+     * 6. 迷你組間休息計時器 (Web Audio API 清脆提示音，無外部音效網址)
+     */
+    function unlockAudioContext() {
+      try {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) audioCtx = new AudioContextClass();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      } catch (e) {
+        // 忽略不支援音訊的環境
+      }
+    }
+
+    function playTimerChime() {
+      try {
+        unlockAudioContext();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        [880, 1174.66].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.18);
+          gain.gain.setValueAtTime(0.001, now + idx * 0.18);
+          gain.gain.exponentialRampToValueAtTime(0.25, now + idx * 0.18 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 0.35);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + idx * 0.18);
+          osc.stop(now + idx * 0.18 + 0.38);
+        });
+      } catch (e) {}
+    }
+
+    function startRestTimer(seconds) {
+      unlockAudioContext();
+      clearInterval(timerInterval);
+      timerRemaining = seconds;
+      const bar = document.getElementById('rest-timer-bar');
+      const dot = document.getElementById('timer-dot');
+      bar.classList.remove('timer-finished');
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+
+      updateTimerDisplay();
+      timerInterval = setInterval(() => {
+        timerRemaining -= 1;
+        if (timerRemaining <= 0) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+          timerRemaining = 0;
+          updateTimerDisplay();
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+          bar.classList.add('timer-finished');
+          playTimerChime();
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          showToast('⏰ 組間休息結束！準備開始下一組', 'watch');
+        } else {
+          updateTimerDisplay();
+        }
+      }, 1000);
+    }
+
+    function stopRestTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerRemaining = 0;
+      updateTimerDisplay();
+      document.getElementById('rest-timer-bar').classList.remove('timer-finished');
+      document.getElementById('timer-dot').className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
+    }
+
+    function updateTimerDisplay() {
+      const mins = String(Math.floor(timerRemaining / 60)).padStart(2, '0');
+      const secs = String(timerRemaining % 60).padStart(2, '0');
+      const display = document.getElementById('timer-display');
+      display.textContent = `${mins}:${secs}`;
+      display.className = timerRemaining > 0
+        ? 'font-mono text-base font-extrabold text-emerald-300 tabular-nums tracking-wider'
+        : 'font-mono text-base font-extrabold text-slate-200 tabular-nums tracking-wider';
+    }
+
+    /**
+     * 7. 個人身體參數與熱量估算公式
+     */
+    function renderProfileUI() {
+      document.getElementById('header-weight-label').textContent = `${state.profile.weight}kg`;
+    }
+
+    function updateProfileBmrPreview() {
+      const w = parseFloat(document.getElementById('profile-weight').value) || 85;
+      const h = parseFloat(document.getElementById('profile-height').value) || 186;
+      const a = parseFloat(document.getElementById('profile-age').value) || 43;
+      const bmr = Math.round(10 * w + 6.25 * h - 5 * a + 5);
+      document.getElementById('profile-bmr-preview').innerHTML =
+        `預估基礎代謝率 (BMR)：<strong class="text-sky-300">${bmr.toLocaleString()} kcal/天</strong>（約 ${(bmr / 24).toFixed(0)} kcal/小時）`;
+    }
+
+    function saveProfile() {
+      const w = Math.max(30, Math.min(250, parseFloat(document.getElementById('profile-weight').value) || 85));
+      const h = Math.max(120, Math.min(230, parseFloat(document.getElementById('profile-height').value) || 186));
+      const a = Math.max(15, Math.min(99, parseInt(document.getElementById('profile-age').value, 10) || 43));
+
+      state.profile = { weight: w, height: h, age: a };
+      persistAllState();
+      pushMetaToCloud({ profile: state.profile });
+      renderProfileUI();
+      updateDraftCaloriePreview();
+      updateSportCaloriePreview();
+      closeModal('modal-profile');
+      showToast(`✅ 已更新身體參數：${w}kg · ${h}cm · ${a}歲`);
+    }
+
+    /**
+     * 計算動態消耗熱量 (Active Calories)，與 Apple Watch 紅色活動圓圈指標對齊
+     */
+    function calculateFormulaActiveCalories(met, durationMinutes, intensityMult = 1.0) {
+      const effectiveMet = met * intensityMult;
+      const netMet = Math.max(1.5, effectiveMet - 1.0); // 扣除靜息 1 MET 得動態熱量
+      const kcal = netMet * state.profile.weight * (durationMinutes / 60);
+      return Math.max(1, Math.round(kcal));
+    }
+
+    /**
+     * 8. AI 智慧推薦今日訓練部位 (分析近 7 天恢復度與訓練容量)
+     */
+    function toggleAiCard() {
+      state.aiExpanded = !state.aiExpanded;
+      const body = document.getElementById('ai-rec-body');
+      const chevron = document.getElementById('ai-chevron');
+      if (state.aiExpanded) {
+        body.classList.remove('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+      } else {
+        body.classList.add('hidden');
+        chevron.style.transform = 'rotate(-90deg)';
+      }
+    }
+
+    function renderAiRecommendation() {
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+      // 統計各肌群近 7 天組數與最後訓練時間
+      const statsByMuscle = {};
+      MUSCLE_GROUPS.forEach(m => {
+        statsByMuscle[m] = { sets: 0, lastTrainedAt: 0 };
+      });
+
+      state.logs.forEach(log => {
+        if (log.type === 'strength' && statsByMuscle[log.muscle]) {
+          if (log.timestamp >= sevenDaysAgo) {
+            statsByMuscle[log.muscle].sets += (log.sets || 0);
+          }
+          if (log.timestamp > statsByMuscle[log.muscle].lastTrainedAt) {
+            statsByMuscle[log.muscle].lastTrainedAt = log.timestamp;
+          }
+        }
+      });
+
+      // 排序：優先推薦近 7 天組數最少、且距離上次訓練最久的肌群
+      const ranked = [...MUSCLE_GROUPS].sort((a, b) => {
+        if (statsByMuscle[a].sets !== statsByMuscle[b].sets) {
+          return statsByMuscle[a].sets - statsByMuscle[b].sets;
+        }
+        return statsByMuscle[a].lastTrainedAt - statsByMuscle[b].lastTrainedAt;
+      });
+
+      const targetMuscle = ranked[0];
+      const info = statsByMuscle[targetMuscle];
+      const daysSince = info.lastTrainedAt > 0
+        ? Math.floor((now - info.lastTrainedAt) / (24 * 60 * 60 * 1000))
+        : null;
+
+      document.getElementById('ai-rec-badge').textContent = `推薦：${targetMuscle}`;
+      const timeText = daysSince === null
+        ? '近 7 天尚未訓練，肌肉處於 100% 滿血狀態'
+        : daysSince === 0
+          ? '今日已有訓練紀錄，可補足細節'
+          : `已充分休息 ${daysSince} 天（近 7 天僅 ${info.sets} 組）`;
+
+      document.getElementById('ai-rec-summary').textContent = `${targetMuscle} · ${timeText}`;
+      document.getElementById('ai-rec-reason').innerHTML =
+        `系統分析過去 7 天訓練分佈，<strong>「${targetMuscle}」</strong>${timeText}。以下為你挑選 3 個高效率動作（優先納入你的自訂器材）：`;
+
+      // 挑選 3 個推薦動作（優先自訂器材）
+      const customList = state.customEquipment[targetMuscle].map(item => item.name);
+      const builtinList = BUILTIN_EQUIPMENT[targetMuscle];
+      const combined = [...new Set([...customList, ...builtinList])].slice(0, 3);
+
+      window._currentRecommendedList = combined.map(eqName => {
+        const last = getLastRecordForEquipment(eqName);
+        const customObj = state.customEquipment[targetMuscle].find(c => c.name === eqName);
+        return {
+          muscle: targetMuscle,
+          equipment: eqName,
+          weight: last ? last.weight : (customObj && customObj.defaultWeight ? customObj.defaultWeight : 40),
+          sets: last ? last.sets : 4,
+          reps: last ? last.reps : 10
+        };
+      });
+
+      const listEl = document.getElementById('ai-rec-exercises');
+      listEl.innerHTML = window._currentRecommendedList.map((rec, idx) => `
+        <div class="flex items-center justify-between gap-2 bg-slate-950/90 border border-slate-800 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-xs font-extrabold text-white truncate">${idx + 1}. ${escapeHtml(rec.equipment)}</div>
+            <div class="text-[11px] text-slate-400">建議：${rec.weight} kg × ${rec.sets} 組 × ${rec.reps} 下</div>
+          </div>
+          <button type="button" onclick="applySingleRecommended(${idx})"
+            class="shrink-0 min-h-[36px] px-3 rounded-lg bg-slate-800 hover:bg-sky-500 hover:text-slate-950 text-sky-300 font-bold text-xs transition active:scale-95">
+            套用
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function applySingleRecommended(index) {
+      const rec = window._currentRecommendedList && window._currentRecommendedList[index];
+      if (!rec) return;
+      selectMuscleGroup(rec.muscle);
+      document.getElementById('equipment-input').value = rec.equipment;
+      document.getElementById('weight-input').value = rec.weight;
+      document.getElementById('sets-input').value = rec.sets;
+      document.getElementById('reps-input').value = rec.reps;
+      handleEquipmentInputChange();
+      updateLiveStrengthPreview();
+      showToast(`已套用推薦動作：${rec.equipment}`);
+    }
+
+    function applyAllRecommendedExercises() {
+      const list = window._currentRecommendedList || [];
+      if (!list.length) return;
+      list.forEach(rec => {
+        state.draftSession.push({
+          id: 'draft-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          muscle: rec.muscle,
+          equipment: rec.equipment,
+          weight: rec.weight,
+          sets: rec.sets,
+          reps: rec.reps
+        });
+      });
+      autoEstimateDraftDuration();
+      persistAllState();
+      renderDraftSession();
+      showToast(`⚡ 已將 ${list.length} 個推薦動作加入今日待存清單！`);
+    }
+
+    /**
+     * 9. 重訓分頁：肌群切換、器材庫、上次重量帶入與步進控制
+     */
+    function renderMusclePills() {
+      const container = document.getElementById('muscle-pills-container');
+      container.innerHTML = MUSCLE_GROUPS.map(muscle => {
+        const active = muscle === state.selectedMuscle;
+        return `
+          <button type="button" onclick="selectMuscleGroup('${muscle}')"
+            class="min-h-[44px] px-4 rounded-xl text-xs font-extrabold shrink-0 transition active:scale-95 ${
+              active
+                ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/25'
+                : 'bg-slate-950 border border-slate-800 text-slate-300 hover:border-slate-600'
+            }">
+            ${muscle}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectMuscleGroup(muscle) {
+      state.selectedMuscle = muscle;
+      renderMusclePills();
+      renderEquipmentControls();
+    }
+
+    function renderEquipmentControls() {
+      const muscle = state.selectedMuscle;
+      const customItems = state.customEquipment[muscle] || [];
+      const builtinItems = BUILTIN_EQUIPMENT[muscle] || [];
+
+      // 更新 <datalist> 自動完成清單（涵蓋全部肌群器材，方便跨肌群搜尋）
+      const datalist = document.getElementById('equipment-datalist');
+      const allNames = new Set();
+      MUSCLE_GROUPS.forEach(m => {
+        (state.customEquipment[m] || []).forEach(c => allNames.add(c.name));
+        (BUILTIN_EQUIPMENT[m] || []).forEach(b => allNames.add(b));
+      });
+      datalist.innerHTML = [...allNames].map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+
+      // 依當前輸入框關鍵字過濾快選膠囊
+      const query = document.getElementById('equipment-input').value.trim().toLowerCase();
+      const pillsContainer = document.getElementById('equipment-pills-container');
+
+      const filteredCustom = customItems.filter(c => !query || c.name.toLowerCase().includes(query));
+      const filteredBuiltin = builtinItems.filter(b =>
+        (!query || b.toLowerCase().includes(query)) &&
+        !customItems.some(c => c.name === b)
+      );
+
+      let html = '';
+      filteredCustom.forEach(c => {
+        html += `
+          <button type="button" onclick="pickEquipment('${escapeJsString(c.name)}')"
+            class="min-h-[40px] px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs font-bold shrink-0 flex items-center gap-1 transition active:scale-95">
+            <span>⭐</span>
+            <span>${escapeHtml(c.name)}</span>
+          </button>
+        `;
+      });
+
+      filteredBuiltin.forEach(name => {
+        html += `
+          <button type="button" onclick="pickEquipment('${escapeJsString(name)}')"
+            class="min-h-[40px] px-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold shrink-0 transition active:scale-95">
+            ${escapeHtml(name)}
+          </button>
+        `;
+      });
+
+      if (!html) {
+        html = `<span class="text-xs text-slate-500 py-2">無符合關鍵字的預設器材，可直接儲存此自訂名稱 ✨</span>`;
+      }
+      pillsContainer.innerHTML = html;
+      checkAndRenderLastRecordBanner();
+    }
+
+    function pickEquipment(name) {
+      document.getElementById('equipment-input').value = name;
+      // 若自訂器材有預設重量且無歷史紀錄，自動帶入預設重量
+      const last = getLastRecordForEquipment(name);
+      const customObj = (state.customEquipment[state.selectedMuscle] || []).find(c => c.name === name);
+      if (last) {
+        document.getElementById('weight-input').value = last.weight;
+        document.getElementById('sets-input').value = last.sets;
+        document.getElementById('reps-input').value = last.reps;
+      } else if (customObj && customObj.defaultWeight) {
+        document.getElementById('weight-input').value = customObj.defaultWeight;
+      }
+      handleEquipmentInputChange();
+      updateLiveStrengthPreview();
+    }
+
+    function clearEquipmentInput() {
+      const input = document.getElementById('equipment-input');
+      input.value = '';
+      input.focus();
+      handleEquipmentInputChange();
+    }
+
+    function handleEquipmentInputChange() {
+      renderEquipmentControls();
+      checkAndRenderLastRecordBanner();
+    }
+
+    function getLastRecordForEquipment(eqName) {
+      if (!eqName) return null;
+      const target = eqName.trim().toLowerCase();
+      const sorted = [...state.logs]
+        .filter(l => l.type === 'strength' && l.equipment && l.equipment.trim().toLowerCase() === target)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      return sorted[0] || null;
+    }
+
+    function checkAndRenderLastRecordBanner() {
+      const name = document.getElementById('equipment-input').value.trim();
+      const banner = document.getElementById('last-record-banner');
+      const last = getLastRecordForEquipment(name);
+      if (last) {
+        window._lastMatchedRecord = last;
+        const daysAgo = Math.max(0, Math.floor((Date.now() - last.timestamp) / (24 * 60 * 60 * 1000)));
+        const dayStr = daysAgo === 0 ? '今天' : `${daysAgo}天前`;
+        document.getElementById('last-record-text').textContent =
+          `${last.weight} kg × ${last.sets} 組 × ${last.reps} 下 (${dayStr})`;
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+      } else {
+        window._lastMatchedRecord = null;
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+      }
+    }
+
+    function applyLastRecordWeight() {
+      const last = window._lastMatchedRecord;
+      if (!last) return;
+      document.getElementById('weight-input').value = last.weight;
+      document.getElementById('sets-input').value = last.sets;
+      document.getElementById('reps-input').value = last.reps;
+      updateLiveStrengthPreview();
+      showToast(`已帶入上次重量：${last.weight} kg`);
+    }
+
+    function adjustWeight(delta) {
+      const input = document.getElementById('weight-input');
+      const current = parseFloat(input.value) || 0;
+      const next = Math.max(0, Math.round((current + delta) * 10) / 10);
+      input.value = next;
+      updateLiveStrengthPreview();
+    }
+
+    function adjustIntInput(inputId, delta, minVal = 1) {
+      const input = document.getElementById(inputId);
+      const current = parseInt(input.value, 10) || minVal;
+      input.value = Math.max(minVal, current + delta);
+      updateLiveStrengthPreview();
+    }
+
+    function updateLiveStrengthPreview() {
+      const w = parseFloat(document.getElementById('weight-input').value) || 0;
+      const s = Math.max(1, parseInt(document.getElementById('sets-input').value, 10) || 1);
+      const r = Math.max(1, parseInt(document.getElementById('reps-input').value, 10) || 1);
+      const vol = Math.round(w * s * r);
+      document.getElementById('exercise-volume-preview').textContent = `單項總容量：${vol.toLocaleString()} kg`;
+    }
+
+    function rememberEquipmentIfChecked(muscle, eqName, weight) {
+      const autoCheck = document.getElementById('auto-save-equipment').checked;
+      if (!autoCheck || !eqName) return;
+
+      const list = state.customEquipment[muscle] || [];
+      const existing = list.find(item => item.name.toLowerCase() === eqName.toLowerCase());
+      if (existing) {
+        existing.defaultWeight = weight;
+      } else {
+        list.unshift({ name: eqName, defaultWeight: weight });
+        state.customEquipment[muscle] = list;
+      }
+      pushMetaToCloud({ customEquipment: state.customEquipment });
+    }
+
+    /**
+     * 10. 今日待存重訓清單與 Apple Watch 實測熱量智慧分攤結算
+     */
+    function readCurrentStrengthForm() {
+      const equipment = document.getElementById('equipment-input').value.trim();
+      if (!equipment) {
+        showToast('請先輸入或點選器材名稱', 'error');
+        document.getElementById('equipment-input').focus();
+        return null;
+      }
+      const weight = Math.max(0, parseFloat(document.getElementById('weight-input').value) || 0);
+      const sets = Math.max(1, parseInt(document.getElementById('sets-input').value, 10) || 1);
+      const reps = Math.max(1, parseInt(document.getElementById('reps-input').value, 10) || 1);
+
+      rememberEquipmentIfChecked(state.selectedMuscle, equipment, weight);
+      renderEquipmentControls();
+
+      return {
+        id: 'draft-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        muscle: state.selectedMuscle,
+        equipment,
+        weight,
+        sets,
+        reps
+      };
+    }
+
+    function addExerciseToDraft() {
+      const item = readCurrentStrengthForm();
+      if (!item) return;
+      state.draftSession.push(item);
+      autoEstimateDraftDuration();
+      persistAllState();
+      renderDraftSession();
+      showToast(`已加入清單：${item.equipment} (${item.weight}kg × ${item.sets}組)`);
+    }
+
+    function quickSaveSingleExercise() {
+      const item = readCurrentStrengthForm();
+      if (!item) return;
+
+      // 估算單筆訓練時間 (每組約 2.5 分鐘，最少 10 分鐘)
+      const estDuration = Math.max(10, Math.round(item.sets * 2.5));
+      const formulaKcal = calculateFormulaActiveCalories(5.5, estDuration, 1.0);
+
+      const newLog = {
+        id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+        type: 'strength',
+        timestamp: Date.now(),
+        muscle: item.muscle,
+        equipment: item.equipment,
+        weight: item.weight,
+        sets: item.sets,
+        reps: item.reps,
+        duration: estDuration,
+        calories: formulaKcal,
+        formulaCalories: formulaKcal,
+        calorieSource: 'formula'
+      };
+
+      state.logs.unshift(newLog);
+      persistAllState();
+      pushLogsBatchToCloud([newLog]);
+      renderAiRecommendation();
+      showToast(`✅ 已儲存單筆紀錄（可於數據歷史補填 Watch 熱量）`);
+    }
+
+    function removeDraftItem(draftId) {
+      state.draftSession = state.draftSession.filter(d => d.id !== draftId);
+      autoEstimateDraftDuration();
+      persistAllState();
+      renderDraftSession();
+    }
+
+    function autoEstimateDraftDuration() {
+      const totalSets = state.draftSession.reduce((sum, item) => sum + item.sets, 0);
+      if (totalSets > 0) {
+        document.getElementById('session-duration-input').value = Math.max(15, Math.round(totalSets * 2.5));
+      }
+    }
+
+    function renderDraftSession() {
+      const listContainer = document.getElementById('draft-list-container');
+      const controls = document.getElementById('draft-settlement-controls');
+      const badge = document.getElementById('draft-count-badge');
+
+      badge.textContent = `${state.draftSession.length} 項動作`;
+
+      if (state.draftSession.length === 0) {
+        listContainer.innerHTML = `
+          <div class="rounded-xl bg-slate-950/70 border border-dashed border-slate-800 py-5 px-3 text-center text-xs text-slate-500">
+            目前清單為空，請在上方點選器材並按「＋ 加入今日待存清單」
+          </div>
+        `;
+        controls.classList.add('hidden');
+        return;
+      }
+
+      controls.classList.remove('hidden');
+      listContainer.innerHTML = state.draftSession.map((item, idx) => {
+        const vol = Math.round(item.weight * item.sets * item.reps);
+        return `
+          <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[10px] font-bold">${item.muscle}</span>
+                <span class="text-xs font-extrabold text-white truncate">${idx + 1}. ${escapeHtml(item.equipment)}</span>
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">
+                <strong class="text-slate-200">${item.weight} kg</strong> × ${item.sets} 組 × ${item.reps} 下
+                <span class="text-slate-500 ml-1">(總量 ${vol.toLocaleString()} kg)</span>
+              </div>
+            </div>
+            <button type="button" onclick="removeDraftItem('${item.id}')" aria-label="移除此動作"
+              class="shrink-0 min-h-[38px] min-w-[38px] rounded-lg bg-slate-900 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 font-bold text-xs flex items-center justify-center">
+              ✕
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      updateDraftCaloriePreview();
+    }
+
+    function updateDraftCaloriePreview() {
+      const duration = Math.max(5, parseInt(document.getElementById('session-duration-input').value, 10) || 45);
+      const formulaTotal = calculateFormulaActiveCalories(5.5, duration, 1.0);
+      document.getElementById('draft-formula-kcal').textContent = formulaTotal;
+
+      const watchRaw = document.getElementById('session-watch-kcal-input').value.trim();
+      const watchVal = parseInt(watchRaw, 10);
+      const statusLabel = document.getElementById('draft-active-source-label');
+
+      if (watchRaw !== '' && !isNaN(watchVal) && watchVal > 0) {
+        statusLabel.innerHTML = `✅ 採用：<span class="text-emerald-400">⌚ Watch 實測 ${watchVal} kcal</span>`;
+      } else {
+        statusLabel.innerHTML = `目前採用：<span class="text-amber-300">📐 公式預估 ${formulaTotal} kcal</span>`;
+      }
+    }
+
+    /**
+     * 儲存整次重訓紀錄：若填入 Apple Watch 實測熱量，依各動作訓練容量比例智慧分攤，
+     * 確保加總精準等於 Watch 實測值（不重複計算）！
+     */
+    function saveDraftSession() {
+      if (state.draftSession.length === 0) return;
+
+      const duration = Math.max(5, parseInt(document.getElementById('session-duration-input').value, 10) || 45);
+      const formulaTotal = calculateFormulaActiveCalories(5.5, duration, 1.0);
+      const watchRaw = document.getElementById('session-watch-kcal-input').value.trim();
+      const watchVal = parseInt(watchRaw, 10);
+      const useWatch = watchRaw !== '' && !isNaN(watchVal) && watchVal > 0;
+      const targetTotalKcal = useWatch ? watchVal : formulaTotal;
+
+      // 計算各動作權重（優先依訓練容量 weight * sets * reps，若為徒手 0kg 則依 sets * reps）
+      const weights = state.draftSession.map(item => {
+        const vol = item.weight * item.sets * item.reps;
+        return vol > 0 ? vol : Math.max(1, item.sets * item.reps);
+      });
+      const weightSum = weights.reduce((a, b) => a + b, 0);
+
+      // 依比例分攤整數大卡並修正四捨五入誤差
+      const allocatedFormula = weights.map(w => Math.round((w / weightSum) * formulaTotal));
+      const allocatedFinal = weights.map(w => Math.round((w / weightSum) * targetTotalKcal));
+
+      const fixRoundingDiff = (arr, expectedTotal) => {
+        const currentSum = arr.reduce((a, b) => a + b, 0);
+        const diff = expectedTotal - currentSum;
+        if (diff !== 0 && arr.length > 0) {
+          let maxIdx = 0;
+          for (let i = 1; i < arr.length; i++) {
+            if (arr[i] > arr[maxIdx]) maxIdx = i;
+          }
+          arr[maxIdx] = Math.max(1, arr[maxIdx] + diff);
+        }
+      };
+      fixRoundingDiff(allocatedFormula, formulaTotal);
+      fixRoundingDiff(allocatedFinal, targetTotalKcal);
+
+      const now = Date.now();
+      const sessionId = 'sess-' + now;
+      const createdLogs = [];
+
+      state.draftSession.forEach((item, idx) => {
+        const itemDuration = Math.max(1, Math.round((weights[idx] / weightSum) * duration));
+        const logObj = {
+          id: 'log-' + now + '-' + idx + '-' + Math.random().toString(36).slice(2, 5),
+          sessionId,
+          type: 'strength',
+          timestamp: now,
+          muscle: item.muscle,
+          equipment: item.equipment,
+          weight: item.weight,
+          sets: item.sets,
+          reps: item.reps,
+          duration: itemDuration,
+          calories: allocatedFinal[idx],
+          formulaCalories: allocatedFormula[idx],
+          calorieSource: useWatch ? 'watch' : 'formula'
+        };
+        state.logs.unshift(logObj);
+        createdLogs.push(logObj);
+      });
+
+      // 清空待存清單與 Watch 輸入框
+      state.draftSession = [];
+      document.getElementById('session-watch-kcal-input').value = '';
+      persistAllState();
+      pushLogsBatchToCloud(createdLogs);
+      renderDraftSession();
+      renderAiRecommendation();
+
+      showToast(
+        useWatch
+          ? `⌚ 已儲存重訓！採用 Watch 實測 ${targetTotalKcal} kcal`
+          : `📐 已儲存重訓！預估消耗 ${targetTotalKcal} kcal`,
+        useWatch ? 'watch' : 'success'
+      );
+    }
+
+    /**
+     * 11. 其他運動分頁 (排球、羽球、有氧與 Watch 實測覆寫)
+     */
+    function renderSportGrid() {
+      const grid = document.getElementById('sport-grid');
+      grid.innerHTML = SPORT_CATALOG.map(sp => {
+        const active = sp.id === state.selectedSportId;
+        return `
+          <button type="button" onclick="selectSport('${sp.id}')"
+            class="min-h-[54px] p-2.5 rounded-xl border text-left flex items-center gap-2 transition active:scale-95 ${
+              active
+                ? 'bg-sky-500/20 border-sky-400 text-white shadow-md shadow-sky-500/10'
+                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600'
+            }">
+            <span class="text-xl shrink-0">${sp.icon}</span>
+            <span class="text-xs font-extrabold leading-tight">${sp.name}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectSport(sportId) {
+      state.selectedSportId = sportId;
+      renderSportGrid();
+      const customBox = document.getElementById('custom-sport-box');
+      if (sportId === 'custom_sport') {
+        customBox.classList.remove('hidden');
+        renderCustomSportsPills();
+      } else {
+        customBox.classList.add('hidden');
+      }
+      updateSportCaloriePreview();
+    }
+
+    function renderCustomSportsPills() {
+      const container = document.getElementById('custom-sports-pills');
+      if (!container) return;
+      if (!state.customSports || state.customSports.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = state.customSports.map(sp => `
+        <button type="button" onclick="pickCustomSportName('${escapeJsString(sp.name)}')"
+          class="min-h-[34px] px-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs font-bold shrink-0">
+          ⭐ ${escapeHtml(sp.name)}
+        </button>
+      `).join('');
+    }
+
+    function pickCustomSportName(name) {
+      document.getElementById('custom-sport-name').value = name;
+    }
+
+    function setSportDuration(mins) {
+      const val = Math.max(5, Math.min(300, parseInt(mins, 10) || 60));
+      document.getElementById('sport-duration-input').value = val;
+      const slider = document.getElementById('sport-duration-slider');
+      if (slider) slider.value = Math.min(180, val);
+      updateSportCaloriePreview();
+    }
+
+    function syncSportDurationSlider() {
+      const val = Math.max(5, parseInt(document.getElementById('sport-duration-input').value, 10) || 60);
+      const slider = document.getElementById('sport-duration-slider');
+      if (slider) slider.value = Math.min(180, val);
+    }
+
+    function selectSportIntensity(mult) {
+      state.selectedIntensity = mult;
+      document.querySelectorAll('.intensity-btn').forEach(btn => {
+        const m = parseFloat(btn.dataset.mult);
+        if (m === mult) {
+          btn.className = 'intensity-btn min-h-[44px] rounded-xl bg-sky-500/20 border border-sky-400 text-xs font-extrabold text-sky-200 transition';
+        } else {
+          btn.className = 'intensity-btn min-h-[44px] rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 transition';
+        }
+      });
+      updateSportCaloriePreview();
+    }
+
+    function updateSportCaloriePreview() {
+      const sport = SPORT_CATALOG.find(s => s.id === state.selectedSportId) || SPORT_CATALOG[0];
+      const duration = Math.max(1, parseInt(document.getElementById('sport-duration-input').value, 10) || 60);
+      const formulaKcal = calculateFormulaActiveCalories(sport.met, duration, state.selectedIntensity);
+
+      document.getElementById('sport-formula-kcal').textContent = formulaKcal;
+
+      const watchRaw = document.getElementById('sport-watch-kcal-input').value.trim();
+      const watchVal = parseInt(watchRaw, 10);
+      const hint = document.getElementById('sport-source-hint');
+
+      if (watchRaw !== '' && !isNaN(watchVal) && watchVal > 0) {
+        hint.textContent = `✅ 將採用 Watch 實測 ${watchVal} kcal`;
+        hint.className = 'text-[11px] text-emerald-300 font-bold';
+      } else {
+        hint.textContent = '留空則採用公式預估';
+        hint.className = 'text-[11px] text-slate-400 font-medium';
+      }
+    }
+
+    function saveSportLog() {
+      const sport = SPORT_CATALOG.find(s => s.id === state.selectedSportId) || SPORT_CATALOG[0];
+      let sportName = sport.name;
+      if (sport.id === 'custom_sport') {
+        const customName = document.getElementById('custom-sport-name').value.trim();
+        if (!customName) {
+          showToast('請輸入自訂運動名稱', 'error');
+          document.getElementById('custom-sport-name').focus();
+          return;
+        }
+        sportName = customName;
+        const autoSaveSport = document.getElementById('auto-save-sport');
+        if (autoSaveSport && autoSaveSport.checked) {
+          if (!state.customSports.some(s => s.name.toLowerCase() === customName.toLowerCase())) {
+            state.customSports.unshift({ name: customName, met: sport.met });
+            pushMetaToCloud({ customSports: state.customSports });
+            renderCustomSportsPills();
+          }
+        }
+      }
+
+      const duration = Math.max(1, parseInt(document.getElementById('sport-duration-input').value, 10) || 60);
+      const formulaKcal = calculateFormulaActiveCalories(sport.met, duration, state.selectedIntensity);
+      const watchRaw = document.getElementById('sport-watch-kcal-input').value.trim();
+      const watchVal = parseInt(watchRaw, 10);
+      const useWatch = watchRaw !== '' && !isNaN(watchVal) && watchVal > 0;
+
+      const newLog = {
+        id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+        type: 'cardio',
+        timestamp: Date.now(),
+        sportName,
+        sportIcon: sport.icon,
+        met: sport.met,
+        duration,
+        intensity: state.selectedIntensity,
+        calories: useWatch ? watchVal : formulaKcal,
+        formulaCalories: formulaKcal,
+        calorieSource: useWatch ? 'watch' : 'formula',
+        note: document.getElementById('sport-note-input').value.trim()
+      };
+
+      state.logs.unshift(newLog);
+      document.getElementById('sport-watch-kcal-input').value = '';
+      document.getElementById('sport-note-input').value = '';
+      persistAllState();
+      pushLogsBatchToCloud([newLog]);
+      updateSportCaloriePreview();
+
+      showToast(
+        useWatch
+          ? `⌚ 已儲存 ${sportName}（Watch 實測 ${watchVal} kcal）`
+          : `📐 已儲存 ${sportName}（預估 ${formulaKcal} kcal）`,
+        useWatch ? 'watch' : 'success'
+      );
+    }
+
+    /**
+     * 12. 數據歷史、統計圖表與事後補填 Watch 熱量
+     */
+    function setHistoryFilter(filter) {
+      state.historyFilter = filter;
+      document.querySelectorAll('.hist-filter-btn').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+          btn.className = 'hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-sky-500 text-slate-950 font-extrabold text-xs shrink-0';
+        } else {
+          btn.className = 'hist-filter-btn min-h-[38px] px-3.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 font-bold text-xs shrink-0';
+        }
+      });
+      renderHistoryList();
+    }
+
+    function renderHistoryAndStats() {
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+      const fourteenDaysAgo = now - 14 * 24 * 60 * 60 * 1000;
+
+      // 本週 (近 7 天) 統計
+      const weekLogs = state.logs.filter(l => l.timestamp >= sevenDaysAgo);
+      const totalWeekKcal = weekLogs.reduce((sum, l) => sum + (l.calories || 0), 0);
+      const watchWeekKcal = weekLogs
+        .filter(l => l.calorieSource === 'watch')
+        .reduce((sum, l) => sum + (l.calories || 0), 0);
+      const watchRatio = totalWeekKcal > 0 ? Math.round((watchWeekKcal / totalWeekKcal) * 100) : 0;
+
+      const uniqueDays = new Set(weekLogs.map(l => new Date(l.timestamp).toDateString())).size;
+      const weekStrengthLogs = weekLogs.filter(l => l.type === 'strength');
+      const totalWeekVolume = weekStrengthLogs.reduce((sum, l) => sum + Math.round((l.weight || 0) * (l.sets || 0) * (l.reps || 0)), 0);
+      const totalWeekSets = weekStrengthLogs.reduce((sum, l) => sum + (l.sets || 0), 0);
+
+      document.getElementById('stat-week-kcal').textContent = totalWeekKcal.toLocaleString();
+      document.getElementById('stat-watch-ratio').textContent = `⌚ Watch 實測佔 ${watchRatio}%`;
+      document.getElementById('stat-week-days').textContent = uniqueDays;
+      document.getElementById('stat-week-sessions').textContent = weekLogs.length;
+      document.getElementById('stat-week-volume').textContent = totalWeekVolume.toLocaleString();
+      document.getElementById('stat-week-sets').textContent = totalWeekSets;
+
+      // 近 14 天六大肌群平衡度
+      const muscleSets14d = {};
+      MUSCLE_GROUPS.forEach(m => { muscleSets14d[m] = 0; });
+      state.logs.forEach(l => {
+        if (l.type === 'strength' && l.timestamp >= fourteenDaysAgo && muscleSets14d[l.muscle] !== undefined) {
+          muscleSets14d[l.muscle] += (l.sets || 0);
+        }
+      });
+      const maxSets = Math.max(12, ...Object.values(muscleSets14d));
+
+      document.getElementById('muscle-balance-bars').innerHTML = MUSCLE_GROUPS.map(m => {
+        const sets = muscleSets14d[m];
+        const pct = Math.min(100, Math.round((sets / maxSets) * 100));
+        const barColor = sets === 0 ? 'bg-slate-700' : sets < 6 ? 'bg-amber-400' : 'bg-emerald-400';
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-bold text-slate-200">${m}</span>
+              <span class="text-slate-400">${sets} 組</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-950 overflow-hidden border border-slate-800">
+              <div class="h-full rounded-full ${barColor} transition-all duration-300" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      renderHistoryList();
+    }
+
+    function renderHistoryList() {
+      const sorted = [...state.logs].sort((a, b) => b.timestamp - a.timestamp);
+      const filtered = sorted.filter(l => {
+        if (state.historyFilter === 'strength') return l.type === 'strength';
+        if (state.historyFilter === 'cardio') return l.type === 'cardio';
+        if (state.historyFilter === 'watch') return l.calorieSource === 'watch';
+        if (state.historyFilter === 'formula') return l.calorieSource !== 'watch';
+        return true;
+      });
+
+      document.getElementById('history-total-count').textContent = `顯示 ${filtered.length} / 共 ${state.logs.length} 筆`;
+      const container = document.getElementById('history-list-container');
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="rounded-2xl bg-slate-900/70 border border-dashed border-slate-800 py-8 px-4 text-center text-xs text-slate-500">
+            此分類目前尚無紀錄
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(log => {
+        const dateStr = formatTaiwanDateTime(log.timestamp);
+        const isWatch = log.calorieSource === 'watch';
+        const badgeHtml = isWatch
+          ? `<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-extrabold">⌚ Watch 實測 · ${log.calories} kcal</span>`
+          : `<span class="px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-amber-300 text-[11px] font-bold">📐 公式預估 · ${log.calories} kcal</span>`;
+
+        const titleHtml = log.type === 'strength'
+          ? `<span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[11px] font-bold mr-1">${log.muscle}</span>${escapeHtml(log.equipment)}`
+          : `${log.sportIcon || '🏐'} ${escapeHtml(log.sportName)}`;
+
+        const detailHtml = log.type === 'strength'
+          ? `${log.weight} kg × ${log.sets} 組 × ${log.reps} 下（總量 ${Math.round(log.weight * log.sets * log.reps).toLocaleString()} kg）`
+          : `運動時間 ${log.duration} 分鐘${log.note ? ' · ' + escapeHtml(log.note) : ''}`;
+
+        return `
+          <div class="bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-[11px] text-slate-400 font-medium">${dateStr}</div>
+                <div class="text-sm font-extrabold text-white mt-0.5 truncate">${titleHtml}</div>
+              </div>
+              <div class="shrink-0">${badgeHtml}</div>
+            </div>
+
+            <div class="text-xs text-slate-300">${detailHtml}</div>
+
+            <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
+              <button type="button" onclick="openEditCaloriesModal('${log.id}')"
+                class="min-h-[38px] px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition active:scale-95">
+                ⌚ 補填/修改熱量
+              </button>
+              <button type="button" id="del-btn-${log.id}" onclick="handleDeleteLogClick('${log.id}')"
+                class="min-h-[38px] px-3 rounded-xl bg-slate-800 hover:bg-rose-500/20 border border-slate-700 text-slate-300 hover:text-rose-300 font-bold text-xs transition active:scale-95">
+                🗑️ 刪除
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 兩段式安全刪除（不使用瀏覽器原生 confirm()）
+    const pendingDeleteSet = new Set();
+    function handleDeleteLogClick(logId) {
+      const btn = document.getElementById(`del-btn-${logId}`);
+      if (!pendingDeleteSet.has(logId)) {
+        pendingDeleteSet.add(logId);
+        if (btn) {
+          btn.textContent = '⚠️ 再按一次確認刪除';
+          btn.className = 'min-h-[38px] px-3 rounded-xl bg-rose-600 text-white font-extrabold text-xs transition';
+        }
+        setTimeout(() => {
+          pendingDeleteSet.delete(logId);
+          renderHistoryList();
+        }, 3500);
+      } else {
+        pendingDeleteSet.delete(logId);
+        state.logs = state.logs.filter(l => l.id !== logId);
+        persistAllState();
+        deleteRecordFromCloud(logId);
+        renderHistoryAndStats();
+        renderAiRecommendation();
+        showToast('🗑️ 已刪除該筆紀錄');
+      }
+    }
+
+    /**
+     * 事後補填 / 修改 Apple Watch 實測熱量彈窗邏輯
+     */
+    function openEditCaloriesModal(logId) {
+      const log = state.logs.find(l => l.id === logId);
+      if (!log) return;
+      state.editingLogId = logId;
+
+      const title = log.type === 'strength' ? `${log.muscle} · ${log.equipment}` : log.sportName;
+      const formulaVal = log.formulaCalories || log.calories;
+      document.getElementById('edit-kcal-target-info').innerHTML = `
+        <div class="font-extrabold text-white text-sm">${escapeHtml(title)}</div>
+        <div>紀錄時間：${formatTaiwanDateTime(log.timestamp)}</div>
+        <div>原始公式預估值：<strong class="text-amber-300">${formulaVal} kcal</strong></div>
+      `;
+      document.getElementById('edit-kcal-input').value = log.calorieSource === 'watch' ? log.calories : '';
+      openModal('modal-edit-kcal');
+    }
+
+    function saveEditedWatchCalories() {
+      const log = state.logs.find(l => l.id === state.editingLogId);
+      if (!log) return;
+      const val = parseInt(document.getElementById('edit-kcal-input').value.trim(), 10);
+      if (isNaN(val) || val <= 0) {
+        showToast('請輸入大於 0 的 Apple Watch 實測大卡數', 'error');
+        return;
+      }
+      if (!log.formulaCalories) log.formulaCalories = log.calories;
+      log.calories = val;
+      log.calorieSource = 'watch';
+      persistAllState();
+      pushLogsBatchToCloud([log]);
+      closeModal('modal-edit-kcal');
+      renderHistoryAndStats();
+      showToast(`⌚ 已更新為 Watch 實測 ${val} kcal`, 'watch');
+    }
+
+    function revertRecordToFormula() {
+      const log = state.logs.find(l => l.id === state.editingLogId);
+      if (!log) return;
+      log.calories = log.formulaCalories || log.calories;
+      log.calorieSource = 'formula';
+      persistAllState();
+      pushLogsBatchToCloud([log]);
+      closeModal('modal-edit-kcal');
+      renderHistoryAndStats();
+      showToast(`📐 已恢復為公式預估 ${log.calories} kcal`);
+    }
+
+    /**
+     * 13. 器材庫管理彈窗 (批次新增、修改名稱與預設重量、刪除)
+     */
+    function renderEquipmentModal() {
+      const tabs = document.getElementById('modal-eq-muscle-tabs');
+      tabs.innerHTML = MUSCLE_GROUPS.map(m => {
+        const active = m === state.modalEqMuscle;
+        return `
+          <button type="button" onclick="switchModalEqMuscle('${m}')"
+            class="min-h-[38px] px-3 rounded-xl text-xs font-extrabold shrink-0 ${
+              active ? 'bg-amber-500 text-slate-950' : 'bg-slate-950 border border-slate-800 text-slate-300'
+            }">
+            ${m}
+          </button>
+        `;
+      }).join('');
+
+      document.getElementById('modal-eq-current-muscle').textContent = state.modalEqMuscle;
+
+      const customList = state.customEquipment[state.modalEqMuscle] || [];
+      const customEl = document.getElementById('modal-custom-eq-list');
+      if (customList.length === 0) {
+        customEl.innerHTML = `<p class="text-xs text-slate-500 py-2">此肌群尚未新增自訂器材。</p>`;
+      } else {
+        customEl.innerHTML = customList.map((item, idx) => `
+          <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl p-2">
+            <input type="text" value="${escapeHtml(item.name)}"
+              onchange="updateCustomEqItem(${idx}, 'name', this.value)"
+              class="flex-1 min-h-[38px] px-2.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white outline-none focus:border-amber-400" />
+            <input type="text" inputmode="decimal" value="${item.defaultWeight || 0}"
+              onchange="updateCustomEqItem(${idx}, 'defaultWeight', this.value)"
+              title="預設重量 (kg)"
+              class="w-16 min-h-[38px] px-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-amber-300 text-center outline-none" />
+            <span class="text-[11px] text-slate-400">kg</span>
+            <button type="button" onclick="deleteCustomEqItem(${idx})"
+              class="min-h-[38px] min-w-[36px] rounded-lg bg-rose-500/15 text-rose-300 font-bold text-xs">✕</button>
+          </div>
+        `).join('');
+      }
+
+      const builtinList = BUILTIN_EQUIPMENT[state.modalEqMuscle] || [];
+      document.getElementById('modal-builtin-eq-list').innerHTML = builtinList.map(name => `
+        <span class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400">${escapeHtml(name)}</span>
+      `).join('');
+    }
+
+    function switchModalEqMuscle(muscle) {
+      state.modalEqMuscle = muscle;
+      renderEquipmentModal();
+    }
+
+    function batchAddCustomEquipment() {
+      const textarea = document.getElementById('batch-equipment-textarea');
+      const raw = textarea.value.trim();
+      if (!raw) {
+        showToast('請輸入要新增的器材名稱', 'error');
+        return;
+      }
+      const names = raw.split(/[\n,，、]+/).map(s => s.trim()).filter(Boolean);
+      const list = state.customEquipment[state.modalEqMuscle] || [];
+      let addedCount = 0;
+
+      names.forEach(name => {
+        if (!list.some(item => item.name.toLowerCase() === name.toLowerCase())) {
+          list.unshift({ name, defaultWeight: 40 });
+          addedCount++;
+        }
+      });
+
+      state.customEquipment[state.modalEqMuscle] = list;
+      textarea.value = '';
+      persistAllState();
+      pushMetaToCloud({ customEquipment: state.customEquipment });
+      renderEquipmentModal();
+      renderEquipmentControls();
+      showToast(`⭐ 已新增 ${addedCount} 項自訂器材`);
+    }
+
+    function updateCustomEqItem(index, field, value) {
+      const list = state.customEquipment[state.modalEqMuscle];
+      if (!list || !list[index]) return;
+      if (field === 'name' && value.trim()) {
+        list[index].name = value.trim();
+      } else if (field === 'defaultWeight') {
+        list[index].defaultWeight = Math.max(0, parseFloat(value) || 0);
+      }
+      persistAllState();
+      pushMetaToCloud({ customEquipment: state.customEquipment });
+      renderEquipmentControls();
+      showToast('已更新器材設定');
+    }
+
+    function deleteCustomEqItem(index) {
+      const list = state.customEquipment[state.modalEqMuscle];
+      if (!list) return;
+      list.splice(index, 1);
+      persistAllState();
+      pushMetaToCloud({ customEquipment: state.customEquipment });
+      renderEquipmentModal();
+      renderEquipmentControls();
+      showToast('已移除自訂器材');
+    }
+
+    /**
+     * 14. JSON 備份匯出 / 匯入與 iPhone 一鍵複製文字備份
+     */
+    function buildBackupPayload() {
+      return JSON.stringify({
+        app: 'FitnessTrackerTaiwan_iOS',
+        exportedAt: new Date().toISOString(),
+        profile: state.profile,
+        customEquipment: state.customEquipment,
+        customSports: state.customSports,
+        logs: state.logs
+      }, null, 2);
+    }
+
+    function copyBackupTextToClipboard() {
+      const payload = buildBackupPayload();
+      const tempTextarea = document.createElement('textarea');
+      tempTextarea.value = payload;
+      tempTextarea.style.position = 'fixed';
+      tempTextarea.style.opacity = '0';
+      document.body.appendChild(tempTextarea);
+      tempTextarea.focus();
+      tempTextarea.select();
+      try {
+        const ok = document.execCommand('copy');
+        if (ok) {
+          showToast('📋 已複製全部備份文字！可直接貼到 Apple 備忘錄');
+        } else {
+          showToast('複製失敗，請改用下載 .json 備份檔', 'error');
+        }
+      } catch (e) {
+        showToast('複製失敗，請改用下載 .json 備份檔', 'error');
+      }
+      document.body.removeChild(tempTextarea);
+    }
+
+    function applyRestoredBackupObject(parsed) {
+      if (!parsed || !Array.isArray(parsed.logs)) {
+        throw new Error('備份格式不正確');
+      }
+      if (parsed.profile) state.profile = parsed.profile;
+      if (parsed.customEquipment) state.customEquipment = parsed.customEquipment;
+      if (Array.isArray(parsed.customSports)) state.customSports = parsed.customSports;
+      state.logs = parsed.logs;
+
+      persistAllState();
+      if (isCloudConnected) {
+        forceUploadLocalToCloud(true);
+      }
+      renderProfileUI();
+      renderEquipmentControls();
+      renderCustomSportsPills();
+      renderAiRecommendation();
+      renderHistoryAndStats();
+      closeModal('modal-backup');
+      showToast(`✅ 成功還原 ${state.logs.length} 筆運動紀錄！`);
+    }
+
+    function restoreFromPastedText() {
+      const raw = document.getElementById('paste-backup-textarea').value.trim();
+      if (!raw) {
+        showToast('請先貼上備份 JSON 文字', 'error');
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        applyRestoredBackupObject(parsed);
+        document.getElementById('paste-backup-textarea').value = '';
+      } catch (err) {
+        showToast('備份文字格式錯誤，請確認完整貼上', 'error');
+      }
+    }
+
+    function exportJsonFile() {
+      const payload = buildBackupPayload();
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateTag = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `健身筆記備份_${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('⬇️ 已下載 JSON 備份檔');
+    }
+
+    function importJsonFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          applyRestoredBackupObject(parsed);
+        } catch (err) {
+          showToast('匯入失敗：檔案不是有效的備份 JSON', 'error');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    /**
+     * 15. 字串與日期格式化輔助函式
+     */
+    function formatTaiwanDateTime(ts) {
+      const d = new Date(ts);
+      const weekNames = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hour = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${month}/${day} (${weekNames[d.getDay()]}) ${hour}:${min}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeJsString(str) {
+      return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    /**
+     * 16. Firebase Realtime Database 跨裝置即時雙向同步引擎
+     */
+    function sanitizeSyncKey(raw) {
+      return String(raw || '').trim().replace(/[.#$\[\]\/\\]/g, '_');
+    }
+
+    function cleanForRTDB(obj) {
+      // 移除 undefined 欄位，避免 Firebase RTDB 寫入拋出錯誤
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function updateCloudStatusUI(mode, detailText = '') {
+      const headerBadge = document.getElementById('cloud-status-badge');
+      const syncBtn = document.getElementById('header-sync-btn');
+      const modalBadge = document.getElementById('sync-modal-badge');
+      const modalDetail = document.getElementById('sync-modal-detail');
+
+      const presets = {
+        offline: {
+          headerHtml: '<span>📱 僅本機儲存（點此設定雲端）</span>',
+          headerClass: 'mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-sky-300 leading-none transition',
+          btnClass: 'min-h-[38px] px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-300 flex items-center gap-1 transition active:scale-95',
+          badgeText: '📱 僅本機儲存',
+          badgeClass: 'px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-extrabold',
+          defaultDetail: '目前所有紀錄皆安全保存於本機瀏覽器。設定 Firebase 網址與個人密鑰即可跨裝置同步。'
+        },
+        connecting: {
+          headerHtml: '<span class="animate-pulse">🔄 雲端連線同步中...</span>',
+          headerClass: 'mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-sky-300 leading-none transition',
+          btnClass: 'min-h-[38px] px-2 rounded-xl bg-sky-500/20 border border-sky-400/50 text-xs font-bold text-sky-300 flex items-center gap-1 transition active:scale-95',
+          badgeText: '🔄 連線同步中...',
+          badgeClass: 'px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-xs font-extrabold',
+          defaultDetail: '正在與 Firebase Realtime Database 進行資料校對與即時監聽建立...'
+        },
+        connected: {
+          headerHtml: `<span>☁️ 雲端即時同步中 · ${escapeHtml(state.cloudConfig.syncKey)}</span>`,
+          headerClass: 'mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 leading-none transition',
+          btnClass: 'min-h-[38px] px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/50 text-xs font-bold text-emerald-300 flex items-center gap-1 transition active:scale-95',
+          badgeText: '☁️ 雲端即時同步中',
+          badgeClass: 'px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold',
+          defaultDetail: `已連線至 /fitness_tracker/${state.cloudConfig.syncKey}，iPhone 與 MacBook Air 變更將即時雙向同步。`
+        },
+        error: {
+          headerHtml: '<span>⚠️ 雲端連線異常（已暫存本機）</span>',
+          headerClass: 'mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 leading-none transition',
+          btnClass: 'min-h-[38px] px-2 rounded-xl bg-amber-500/15 border border-amber-500/50 text-xs font-bold text-amber-300 flex items-center gap-1 transition active:scale-95',
+          badgeText: '⚠️ 連線異常 / 本機離線模式',
+          badgeClass: 'px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-extrabold',
+          defaultDetail: '無法連線至 Firebase（可能處於地下室無網路，或 Database URL / 安全規則尚未設定）。您的新紀錄已先安全存於本機。'
+        }
+      };
+
+      const p = presets[mode] || presets.offline;
+      if (headerBadge) {
+        headerBadge.innerHTML = p.headerHtml;
+        headerBadge.className = p.headerClass;
+      }
+      if (syncBtn) syncBtn.className = p.btnClass;
+      if (modalBadge) {
+        modalBadge.textContent = p.badgeText;
+        modalBadge.className = p.badgeClass;
+      }
+      if (modalDetail) {
+        modalDetail.textContent = detailText || p.defaultDetail;
+      }
+    }
+
+    function populateSyncModalFields() {
+      document.getElementById('sync-db-url-input').value = state.cloudConfig.databaseURL || '';
+      document.getElementById('sync-key-input').value = state.cloudConfig.syncKey || '';
+      document.getElementById('sync-apikey-input').value = state.cloudConfig.apiKey || '';
+      document.getElementById('sync-projectid-input').value = state.cloudConfig.projectId || '';
+    }
+
+    function generateRandomSyncKey() {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let rand = '';
+      for (let i = 0; i < 8; i++) {
+        rand += chars[Math.floor(Math.random() * chars.length)];
+      }
+      document.getElementById('sync-key-input').value = `fit_${rand}`;
+      showToast('🎲 已產生專屬安全密鑰，請記得點擊「儲存設定並啟動即時同步」');
+    }
+
+    function copySyncShareUrl() {
+      const dbUrl = document.getElementById('sync-db-url-input').value.trim() || state.cloudConfig.databaseURL;
+      const syncKey = sanitizeSyncKey(document.getElementById('sync-key-input').value.trim() || state.cloudConfig.syncKey);
+      if (!dbUrl || !syncKey) {
+        showToast('請先填寫 Database URL 與專屬個人同步密鑰', 'error');
+        return;
+      }
+      const baseUrl = window.location.origin + window.location.pathname;
+      const shareUrl = `${baseUrl}?syncKey=${encodeURIComponent(syncKey)}&dbUrl=${encodeURIComponent(dbUrl)}`;
+
+      const temp = document.createElement('textarea');
+      temp.value = shareUrl;
+      temp.style.position = 'fixed';
+      temp.style.opacity = '0';
+      document.body.appendChild(temp);
+      temp.focus();
+      temp.select();
+      try {
+        document.execCommand('copy');
+        showToast('🔗 已複製快速同步網址！用 Safari 開啟即自動帶入密鑰');
+      } catch (e) {
+        showToast('複製失敗，請手動複製網址列', 'error');
+      }
+      document.body.removeChild(temp);
+    }
+
+    async function saveAndConnectCloud() {
+      const dbUrl = document.getElementById('sync-db-url-input').value.trim();
+      const rawKey = document.getElementById('sync-key-input').value.trim();
+      const apiKey = document.getElementById('sync-apikey-input').value.trim();
+      const projectId = document.getElementById('sync-projectid-input').value.trim();
+
+      if (!dbUrl || !dbUrl.startsWith('https://') || dbUrl.includes('YOUR_PROJECT_ID')) {
+        showToast('請輸入有效的 Firebase Database URL（https:// 開頭）', 'error');
+        return;
+      }
+      const cleanKey = sanitizeSyncKey(rawKey);
+      if (!cleanKey || cleanKey.length < 6) {
+        showToast('專屬同步密鑰至少需要 6 個字元以確保資料隔離安全', 'error');
+        return;
+      }
+
+      state.cloudConfig = {
+        enabled: true,
+        databaseURL: dbUrl.replace(/\/+$/, ''),
+        syncKey: cleanKey,
+        apiKey,
+        projectId
+      };
+      persistAllState();
+      await initFirebaseCloudSync(true);
+    }
+
+    async function initFirebaseCloudSync(isManualConnect = false) {
+      const fb = window.__firebaseRTDB;
+      const cfg = state.cloudConfig;
+
+      if (!fb || !cfg.enabled || !cfg.databaseURL || !cfg.syncKey || cfg.databaseURL.includes('YOUR_PROJECT_ID')) {
+        isCloudConnected = false;
+        updateCloudStatusUI('offline');
+        return;
+      }
+
+      updateCloudStatusUI('connecting');
+
+      try {
+        // 若先前已初始化過不同網址的 Firebase App，先安全清除再重建
+        const existingApps = fb.getApps();
+        for (const app of existingApps) {
+          await fb.deleteApp(app);
+        }
+        if (activeRootRef) {
+          fb.off(activeRootRef);
+          activeRootRef = null;
+        }
+
+        const firebaseOptions = {
+          databaseURL: cfg.databaseURL
+        };
+        if (cfg.apiKey && cfg.apiKey !== 'YOUR_API_KEY') firebaseOptions.apiKey = cfg.apiKey;
+        if (cfg.projectId && cfg.projectId !== 'YOUR_PROJECT_ID') firebaseOptions.projectId = cfg.projectId;
+
+        const app = fb.initializeApp(firebaseOptions);
+        rtdbInstance = fb.getDatabase(app);
+        activeRootRef = fb.ref(rtdbInstance, `fitness_tracker/${cfg.syncKey}`);
+
+        // 1. 首次連線先做智慧雙向合併，避免覆蓋本機離線紀錄
+        await performInitialSmartMerge(fb, activeRootRef);
+
+        // 2. 建立即時 onValue 監聽器（另一台裝置有新增/修改/刪除時秒級更新）
+        fb.onValue(activeRootRef, (snapshot) => {
+          isCloudConnected = true;
+          const timeStr = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          updateCloudStatusUI('connected', `已連線至 /fitness_tracker/${cfg.syncKey}（最後同步：${timeStr}）`);
+
+          if (!snapshot.exists()) return;
+          const cloudData = snapshot.val();
+          applyCloudSnapshotToLocal(cloudData);
+        }, (err) => {
+          isCloudConnected = false;
+          console.error('Firebase 監聽錯誤:', err);
+          updateCloudStatusUI('error', `Firebase 讀寫受阻：${err.message || '請檢查網路連線或安全規則設定'}`);
+        });
+
+        if (isManualConnect) {
+          closeModal('modal-sync');
+          showToast(`☁️ 已連線至 Firebase 雲端（密鑰：${cfg.syncKey}）`, 'watch');
+        }
+      } catch (err) {
+        isCloudConnected = false;
+        console.error('Firebase 初始化失敗:', err);
+        updateCloudStatusUI('error', `初始化失敗：${err.message || '請確認 Database URL 格式正確'}`);
+        if (isManualConnect) {
+          showToast('雲端連線失敗，請檢查網址與安全規則', 'error');
+        }
+      }
+    }
+
+    async function performInitialSmartMerge(fb, rootRef) {
+      const snap = await fb.get(rootRef);
+      if (!snap.exists()) {
+        // 雲端尚無資料：若本機有紀錄，自動上傳至雲端建立初始資料庫
+        await forceUploadLocalToCloud(true);
+        return;
+      }
+
+      const cloudData = snap.val() || {};
+      const cloudLogsMap = cloudData.logs && typeof cloudData.logs === 'object' ? cloudData.logs : {};
+      const mergedMap = { ...cloudLogsMap };
+      let hasLocalOnlyLogs = false;
+
+      // 將本機獨有的紀錄（例如在地下室離線新增的紀錄）補傳至雲端
+      state.logs.forEach(localLog => {
+        if (localLog && localLog.id && !mergedMap[localLog.id]) {
+          mergedMap[localLog.id] = cleanForRTDB(localLog);
+          hasLocalOnlyLogs = true;
+        }
+      });
+
+      // 合併自訂器材庫
+      const mergedCustomEq = { ...state.customEquipment };
+      if (cloudData.customEquipment && typeof cloudData.customEquipment === 'object') {
+        MUSCLE_GROUPS.forEach(m => {
+          const cloudArr = Array.isArray(cloudData.customEquipment[m]) ? cloudData.customEquipment[m] : [];
+          const localArr = Array.isArray(mergedCustomEq[m]) ? mergedCustomEq[m] : [];
+          const combined = [...cloudArr];
+          localArr.forEach(item => {
+            if (!combined.some(c => c.name.toLowerCase() === item.name.toLowerCase())) {
+              combined.push(item);
+            }
+          });
+          mergedCustomEq[m] = combined;
+        });
+      }
+
+      // 合併自訂運動
+      const mergedCustomSports = Array.isArray(cloudData.customSports) ? [...cloudData.customSports] : [];
+      (state.customSports || []).forEach(sp => {
+        if (!mergedCustomSports.some(c => c.name.toLowerCase() === sp.name.toLowerCase())) {
+          mergedCustomSports.push(sp);
+        }
+      });
+
+      const mergedProfile = cloudData.profile && cloudData.profile.weight ? cloudData.profile : state.profile;
+
+      if (hasLocalOnlyLogs || Object.keys(cloudLogsMap).length === 0) {
+        await fb.set(rootRef, cleanForRTDB({
+          logs: mergedMap,
+          customEquipment: mergedCustomEq,
+          customSports: mergedCustomSports,
+          profile: mergedProfile,
+          updatedAt: new Date().toISOString()
+        }));
+      }
+    }
+
+    function applyCloudSnapshotToLocal(cloudData) {
+      if (!cloudData || typeof cloudData !== 'object') return;
+
+      // 將 RTDB 的 logs 物件轉回依時間新到舊排序的陣列
+      const logsMap = cloudData.logs && typeof cloudData.logs === 'object' ? cloudData.logs : {};
+      const nextLogs = Object.values(logsMap)
+        .filter(item => item && item.id)
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      state.logs = nextLogs;
+
+      if (cloudData.profile && cloudData.profile.weight) {
+        state.profile = cloudData.profile;
+      }
+
+      if (cloudData.customEquipment && typeof cloudData.customEquipment === 'object') {
+        MUSCLE_GROUPS.forEach(m => {
+          state.customEquipment[m] = Array.isArray(cloudData.customEquipment[m]) ? cloudData.customEquipment[m] : [];
+        });
+      }
+
+      if (Array.isArray(cloudData.customSports)) {
+        state.customSports = cloudData.customSports;
+      }
+
+      persistAllState();
+      renderProfileUI();
+      renderEquipmentControls();
+      renderCustomSportsPills();
+      renderAiRecommendation();
+      renderHistoryAndStats();
+    }
+
+    /**
+     * 單筆或多筆新增/更新時，精準寫入 /logs/{id} 節點，避免多裝置並發覆蓋陣列
+     */
+    async function pushLogsBatchToCloud(logsArray) {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !isCloudConnected || !activeRootRef || !Array.isArray(logsArray) || logsArray.length === 0) return;
+
+      try {
+        const updates = {
+          updatedAt: new Date().toISOString()
+        };
+        logsArray.forEach(log => {
+          if (log && log.id) {
+            updates[`logs/${log.id}`] = cleanForRTDB(log);
+          }
+        });
+        await fb.update(activeRootRef, updates);
+      } catch (err) {
+        console.error('同步紀錄至雲端失敗:', err);
+        updateCloudStatusUI('error');
+      }
+    }
+
+    async function deleteRecordFromCloud(logId) {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !isCloudConnected || !activeRootRef || !logId) return;
+
+      try {
+        await fb.update(activeRootRef, {
+          [`logs/${logId}`]: null,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('從雲端刪除紀錄失敗:', err);
+        updateCloudStatusUI('error');
+      }
+    }
+
+    async function pushMetaToCloud(partialMeta) {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !isCloudConnected || !activeRootRef) return;
+
+      try {
+        await fb.update(activeRootRef, cleanForRTDB({
+          ...partialMeta,
+          updatedAt: new Date().toISOString()
+        }));
+      } catch (err) {
+        console.error('同步設定至雲端失敗:', err);
+        updateCloudStatusUI('error');
+      }
+    }
+
+    async function manualMergeSync() {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !activeRootRef) {
+        showToast('請先輸入連線資訊並啟動同步', 'error');
+        return;
+      }
+      try {
+        updateCloudStatusUI('connecting');
+        await performInitialSmartMerge(fb, activeRootRef);
+        const snap = await fb.get(activeRootRef);
+        if (snap.exists()) applyCloudSnapshotToLocal(snap.val());
+        updateCloudStatusUI('connected');
+        showToast('🔄 已完成雙向合併同步！', 'watch');
+      } catch (err) {
+        updateCloudStatusUI('error');
+        showToast('雙向合併失敗，請檢查網路狀態', 'error');
+      }
+    }
+
+    const pendingForceCloudSet = new Set();
+    function handleForceCloudAction(actionType) {
+      const btnId = actionType === 'upload' ? 'btn-force-upload' : 'btn-force-download';
+      const btn = document.getElementById(btnId);
+      if (!pendingForceCloudSet.has(actionType)) {
+        pendingForceCloudSet.add(actionType);
+        if (btn) btn.textContent = '⚠️ 再按一次確認覆蓋';
+        setTimeout(() => {
+          pendingForceCloudSet.delete(actionType);
+          if (btn) {
+            btn.textContent = actionType === 'upload' ? '⬆️ 本機完整覆蓋雲端' : '⬇️ 雲端完整覆蓋本機';
+          }
+        }, 3500);
+        return;
+      }
+
+      pendingForceCloudSet.delete(actionType);
+      if (btn) {
+        btn.textContent = actionType === 'upload' ? '⬆️ 本機完整覆蓋雲端' : '⬇️ 雲端完整覆蓋本機';
+      }
+
+      if (actionType === 'upload') {
+        forceUploadLocalToCloud(false);
+      } else {
+        forceDownloadCloudToLocal();
+      }
+    }
+
+    async function forceUploadLocalToCloud(silent = false) {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !activeRootRef) {
+        if (!silent) showToast('尚未連線至 Firebase', 'error');
+        return;
+      }
+      try {
+        const logsMap = {};
+        state.logs.forEach(l => {
+          if (l && l.id) logsMap[l.id] = cleanForRTDB(l);
+        });
+        await fb.set(activeRootRef, cleanForRTDB({
+          logs: logsMap,
+          customEquipment: state.customEquipment,
+          customSports: state.customSports,
+          profile: state.profile,
+          updatedAt: new Date().toISOString()
+        }));
+        if (!silent) showToast('⬆️ 已將本機資料完整上傳覆蓋雲端！', 'watch');
+      } catch (err) {
+        if (!silent) showToast('上傳失敗，請檢查 Firebase 安全規則', 'error');
+      }
+    }
+
+    async function forceDownloadCloudToLocal() {
+      const fb = window.__firebaseRTDB;
+      if (!fb || !activeRootRef) {
+        showToast('尚未連線至 Firebase', 'error');
+        return;
+      }
+      try {
+        const snap = await fb.get(activeRootRef);
+        if (!snap.exists()) {
+          showToast('雲端目前沒有任何紀錄可下載', 'error');
+          return;
+        }
+        applyCloudSnapshotToLocal(snap.val());
+        showToast('⬇️ 已將雲端資料完整下載覆蓋本機！', 'watch');
+      } catch (err) {
+        showToast('下載失敗，請檢查網路與安全規則', 'error');
+      }
+    }
+
+    async function disconnectFirebaseSync() {
+      const fb = window.__firebaseRTDB;
+      if (fb && activeRootRef) {
+        fb.off(activeRootRef);
+        activeRootRef = null;
+      }
+      isCloudConnected = false;
+      state.cloudConfig.enabled = false;
+      persistAllState();
+      updateCloudStatusUI('offline');
+      showToast('🔌 已斷開雲端連線，改為僅本機儲存');
+    }
+  </script>
+</body>
+</html>
