@@ -1,2049 +1,1675 @@
 <!DOCTYPE html>
 <html lang="zh-TW" class="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>全方位健身與運動紀錄儀表板</title>
-  
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#ecfdf5',
-              100: '#d1fae5',
-              500: '#10b981',
-              600: '#059669',
-              700: '#047857',
-              accent: '#22c55e',
-              cyan: '#06b6d4'
-            },
-            dark: {
-              bg: '#09090b',
-              card: '#121215',
-              border: '#27272a',
-              input: '#18181b',
-              hover: '#27272a'
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <style>
-    /* 運動質感字型與基本樣式 */
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: #09090b;
-      color: #f4f4f5;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-    }
-    
-    /* 隱藏滾動條但保持滾動 */
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    /* PWA 與 iOS 底部安全區域 */
-    .pb-safe {
-      padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
-    }
-    .bottom-safe {
-      bottom: 0;
-      padding-bottom: env(safe-area-inset-bottom, 0.5rem);
-    }
-
-    /* 動態微光與點擊回饋 */
-    .btn-active:active {
-      transform: scale(0.97);
-    }
-    .glass-card {
-      background: rgba(18, 18, 21, 0.85);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-  </style>
-</head>
-<body class="bg-dark-bg min-h-screen text-zinc-100 antialiased selection:bg-brand-500 selection:text-white">
-
-  <!-- 頂部標題與工具列 -->
-  <header class="sticky top-0 z-40 bg-dark-bg/90 backdrop-blur-md border-b border-dark-border px-4 py-3">
-    <div class="max-w-4xl mx-auto flex items-center justify-between gap-2">
-      <!-- 標題與即時同步狀態 -->
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-1.5">
-          <span class="text-brand-accent">⚡</span> 健身數據筆記
-        </h1>
-        <div id="syncStatusBadge" class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" id="syncStatusDot"></span>
-          <span id="syncStatusText">連線中...</span>
-        </div>
-      </div>
-
-      <!-- 右側工具按鈕區 (直覺簡潔) -->
-      <div class="flex items-center gap-1.5">
-        <button onclick="handleManualSync()" title="立即同步雲端資料" class="btn-active px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-brand-accent border border-zinc-700 flex items-center gap-1">
-          <span>🔄</span> <span class="hidden sm:inline">立即同步</span>
-        </button>
-        <button onclick="openModal('cloudModal')" title="雲端設定" class="btn-active p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 border border-zinc-700">
-          ☁️
-        </button>
-        <button onclick="openModal('equipmentModal')" title="器材庫管理" class="btn-active p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 border border-zinc-700">
-          ⚙️
-        </button>
-        <button onclick="openModal('profileModal')" title="個人身體參數" class="btn-active p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 border border-zinc-700">
-          👤
-        </button>
-        <button onclick="openModal('backupModal')" title="資料備份與匯出" class="btn-active p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 border border-zinc-700">
-          💾
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- 主要內容區域 -->
-  <main class="max-w-4xl mx-auto px-4 pt-4 pb-safe">
-
-    <!-- 1. 重訓紀錄分頁 -->
-    <section id="tab-strength" class="space-y-5">
-      <!-- AI 今日部位推薦 -->
-      <div class="glass-card rounded-2xl p-4 border border-brand-500/20 bg-gradient-to-r from-brand-950/30 to-zinc-900/50 relative overflow-hidden">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-2 text-xs font-semibold text-brand-accent uppercase tracking-wider mb-1">
-              <span>🤖 AI 今日訓練分析推薦</span>
-            </div>
-            <h2 id="aiRecommendTitle" class="text-base font-bold text-white">讀取歷史訓練進度中...</h2>
-            <p id="aiRecommendDesc" class="text-xs text-zinc-400 mt-1">根據您近 7 天六大肌群鍛鍊頻率自動評估</p>
-          </div>
-          <button id="aiApplyBtn" onclick="applyAiRecommendation()" class="btn-active shrink-0 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-medium text-white shadow-lg shadow-brand-900/40">
-            一鍵套用動作
-          </button>
-        </div>
-        <div id="aiRecBadges" class="flex flex-wrap gap-1.5 mt-3"></div>
-      </div>
-
-      <!-- 肌群類別切換膠囊 -->
-      <div>
-        <label class="block text-xs text-zinc-400 mb-2 font-medium">1. 選擇目標肌群</label>
-        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1" id="muscleCategoryCapsules">
-          <!-- JS 動態生成肌群按鈕 -->
-        </div>
-      </div>
-
-      <!-- 器材選取區 -->
-      <div class="glass-card rounded-2xl p-4 space-y-3">
-        <div class="flex items-center justify-between">
-          <label class="text-xs text-zinc-400 font-medium">2. 選擇或輸入訓練器材/動作</label>
-          <span id="lastRecordBadge" class="text-[11px] text-brand-cyan hidden">上次紀錄：載入中</span>
-        </div>
-
-        <!-- 搜尋/輸入框 -->
-        <div class="relative">
-          <input type="text" id="equipmentInput" placeholder="搜尋或直接輸入動作名稱（例如：槓鈴臥推）"
-            class="w-full bg-dark-input border border-dark-border rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-brand-500 transition-colors"
-            oninput="handleEquipmentSearch(this.value)" autocomplete="off">
-          <div id="equipmentAutocomplete" class="absolute left-0 right-0 top-full mt-1 bg-dark-card border border-dark-border rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto hidden">
-            <!-- 搜尋建議 -->
-          </div>
-        </div>
-
-        <!-- 快捷常用器材按鈕區 -->
-        <div class="space-y-2 pt-1">
-          <div class="flex items-center justify-between">
-            <span class="text-[11px] text-zinc-500">推薦與常用器材</span>
-            <button onclick="quickFillLastRecord()" id="btnFillLast" class="text-[11px] text-brand-accent hover:underline hidden">⚡ 帶入上次重量下數</button>
-          </div>
-          <div class="flex flex-wrap gap-1.5" id="equipmentQuickBadges">
-            <!-- JS 動態生成器材膠囊 -->
-          </div>
-        </div>
-      </div>
-
-      <!-- 單組重量與次數輸入區 -->
-      <div class="glass-card rounded-2xl p-4 space-y-4">
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-zinc-400 font-medium">3. 設定重量與次數</span>
-          <div class="flex items-center gap-1.5">
-            <span class="text-xs text-zinc-500">一次加：</span>
-            <button onclick="setAddSetsCount(1)" class="set-count-btn px-2 py-0.5 rounded text-xs border border-brand-500 bg-brand-500/20 text-brand-accent font-semibold" data-count="1">1組</button>
-            <button onclick="setAddSetsCount(2)" class="set-count-btn px-2 py-0.5 rounded text-xs border border-zinc-700 bg-dark-input text-zinc-400" data-count="2">2組</button>
-            <button onclick="setAddSetsCount(3)" class="set-count-btn px-2 py-0.5 rounded text-xs border border-zinc-700 bg-dark-input text-zinc-400" data-count="3">3組</button>
-            <button onclick="setAddSetsCount(4)" class="set-count-btn px-2 py-0.5 rounded text-xs border border-zinc-700 bg-dark-input text-zinc-400" data-count="4">4組</button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <!-- 重量輸入 -->
-          <div class="bg-dark-input rounded-xl p-3 border border-dark-border space-y-2">
-            <div class="flex justify-between items-center text-xs text-zinc-400">
-              <span>重量 (kg)</span>
-              <span class="text-[10px] text-zinc-500">支援 0.5 kg</span>
-            </div>
-            <div class="flex items-center justify-between gap-1">
-              <input type="number" id="inputWeight" step="0.5" inputmode="decimal" value="60"
-                class="w-full bg-transparent text-center font-bold text-xl text-white focus:outline-none">
-            </div>
-            <div class="grid grid-cols-4 gap-1 pt-1">
-              <button onclick="adjustInput('inputWeight', -5)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">-5</button>
-              <button onclick="adjustInput('inputWeight', -2.5)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">-2.5</button>
-              <button onclick="adjustInput('inputWeight', 2.5)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">+2.5</button>
-              <button onclick="adjustInput('inputWeight', 5)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">+5</button>
-            </div>
-          </div>
-
-          <!-- 次數輸入 -->
-          <div class="bg-dark-input rounded-xl p-3 border border-dark-border space-y-2">
-            <div class="flex justify-between items-center text-xs text-zinc-400">
-              <span>次數 (下)</span>
-              <span class="text-[10px] text-zinc-500">每組下數</span>
-            </div>
-            <div class="flex items-center justify-between gap-1">
-              <input type="number" id="inputReps" step="1" inputmode="numeric" value="10"
-                class="w-full bg-transparent text-center font-bold text-xl text-white focus:outline-none">
-            </div>
-            <div class="grid grid-cols-4 gap-1 pt-1">
-              <button onclick="adjustInput('inputReps', -2)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">-2</button>
-              <button onclick="adjustInput('inputReps', -1)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">-1</button>
-              <button onclick="adjustInput('inputReps', 1)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">+1</button>
-              <button onclick="adjustInput('inputReps', 2)" class="btn-active py-1 bg-zinc-800 text-xs rounded text-zinc-300">+2</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 加入待存清單按鈕 -->
-        <button onclick="addToPendingList()" class="btn-active w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold text-sm shadow-lg shadow-brand-900/40 flex items-center justify-center gap-2">
-          <span>＋ 加入今日待存清單</span>
-        </button>
-      </div>
-
-      <!-- 今日待存清單區塊 (核心亮點：同動作彙整成卡片，可直接再加一組) -->
-      <div class="glass-card rounded-2xl p-4 border border-zinc-800 space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
-              <span>📝 今日待存訓練清單</span>
-              <span id="pendingBadgeCount" class="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-accent font-semibold">0 動作</span>
-            </h3>
-          </div>
-          <button onclick="clearPendingList()" id="btnClearPending" class="text-xs text-zinc-500 hover:text-red-400 hidden">清空待存</button>
-        </div>
-
-        <!-- 待存項目區域 (依肌群分門別類，同動作彙整) -->
-        <div id="pendingListContainer" class="space-y-4">
-          <!-- JS 動態生成分門別類的動作卡片 -->
-          <div class="text-center py-8 text-zinc-500 text-xs">
-            目前暫無待儲存的動作。請在上方選擇器材並點擊「＋ 加入今日待存清單」。
-          </div>
-        </div>
-
-        <!-- 結算區與實際大卡填寫 -->
-        <div id="pendingSummaryBox" class="border-t border-zinc-800 pt-3 space-y-3 hidden">
-          <div class="grid grid-cols-3 gap-2 text-center text-xs bg-dark-input p-2.5 rounded-xl border border-zinc-800">
-            <div>
-              <span class="text-zinc-500 block text-[10px]">總組數</span>
-              <span id="pendingTotalSets" class="font-bold text-white">0 組</span>
-            </div>
-            <div>
-              <span class="text-zinc-500 block text-[10px]">總訓練量</span>
-              <span id="pendingTotalVolume" class="font-bold text-brand-accent">0 kg</span>
-            </div>
-            <div>
-              <span class="text-zinc-500 block text-[10px]">預估消耗</span>
-              <span id="pendingTotalEstCal" class="font-bold text-brand-cyan">0 大卡</span>
-            </div>
-          </div>
-
-          <!-- 實際消耗大卡（選填） -->
-          <div class="flex items-center justify-between gap-3 bg-dark-input px-3 py-2 rounded-xl border border-zinc-800">
-            <label class="text-xs text-zinc-400 shrink-0">⌚ 實際消耗大卡 (選填)</label>
-            <input type="number" id="pendingActualCalInput" inputmode="numeric" placeholder="留空則使用公式預估"
-              class="w-full bg-transparent text-right text-xs text-white focus:outline-none placeholder-zinc-600">
-          </div>
-
-          <!-- 儲存全部按鈕 -->
-          <button onclick="commitPendingList()" class="btn-active w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-base shadow-xl shadow-brand-500/20 flex items-center justify-center gap-2">
-            <span>✓ 儲存今日全部訓練紀錄</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-
-    <!-- 2. 其他運動分頁 (排球、羽球、跑步等) -->
-    <section id="tab-cardio" class="space-y-5 hidden">
-      <div class="glass-card rounded-2xl p-4 space-y-4">
-        <h2 class="text-base font-bold text-white flex items-center gap-2">
-          <span>🏐 球類與有氧運動紀錄</span>
-        </h2>
-
-        <!-- 運動項目選取 -->
-        <div class="space-y-2">
-          <label class="text-xs text-zinc-400 font-medium">選擇運動項目</label>
-          <div class="grid grid-cols-3 gap-2" id="cardioSportsGrid">
-            <!-- JS 動態生成排球、羽球、跑步、快走等按鈕 -->
-          </div>
-        </div>
-
-        <!-- 運動時間設定 -->
-        <div class="space-y-2">
-          <div class="flex justify-between items-center text-xs">
-            <span class="text-zinc-400">運動時間 (分鐘)</span>
-            <span id="cardioMinutesVal" class="text-brand-accent font-bold text-sm">60 分鐘</span>
-          </div>
-          <input type="range" id="cardioMinutesRange" min="10" max="240" step="5" value="60"
-            class="w-full accent-brand-500 bg-zinc-800 h-2 rounded-lg cursor-pointer"
-            oninput="updateCardioMinutes(this.value)">
-          <div class="flex gap-1.5 pt-1">
-            <button onclick="updateCardioMinutes(30)" class="btn-active flex-1 py-1 bg-zinc-800 text-xs rounded text-zinc-300">30分</button>
-            <button onclick="updateCardioMinutes(45)" class="btn-active flex-1 py-1 bg-zinc-800 text-xs rounded text-zinc-300">45分</button>
-            <button onclick="updateCardioMinutes(60)" class="btn-active flex-1 py-1 bg-zinc-800 text-xs rounded text-zinc-300">60分</button>
-            <button onclick="updateCardioMinutes(90)" class="btn-active flex-1 py-1 bg-zinc-800 text-xs rounded text-zinc-300">90分</button>
-            <button onclick="updateCardioMinutes(120)" class="btn-active flex-1 py-1 bg-zinc-800 text-xs rounded text-zinc-300">120分</button>
-          </div>
-        </div>
-
-        <!-- 熱量消耗估算與手動實測值 -->
-        <div class="grid grid-cols-2 gap-3 bg-dark-input p-3 rounded-xl border border-zinc-800">
-          <div>
-            <span class="text-[11px] text-zinc-500 block">公式預估熱量</span>
-            <span id="cardioEstCal" class="text-sm font-bold text-brand-cyan">360 大卡</span>
-          </div>
-          <div>
-            <label class="text-[11px] text-zinc-400 block mb-0.5">實測消耗大卡 (選填)</label>
-            <input type="number" id="cardioActualCal" inputmode="numeric" placeholder="手錶顯示熱量"
-              class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none">
-          </div>
-        </div>
-
-        <button onclick="saveCardioLog()" class="btn-active w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-sm shadow-lg shadow-brand-500/20">
-          ＋ 儲存運動紀錄
-        </button>
-      </div>
-    </section>
-
-
-    <!-- 3. 數據歷史分頁 (核心亮點：預設依動作彙整視角) -->
-    <section id="tab-history" class="space-y-5 hidden">
-      <!-- 統計摘要儀表板 -->
-      <div class="grid grid-cols-3 gap-2">
-        <div class="glass-card rounded-2xl p-3 text-center border border-zinc-800">
-          <span class="text-[10px] text-zinc-500 block">本週消耗熱量</span>
-          <span id="statWeekCalories" class="text-base font-extrabold text-brand-accent">0</span>
-          <span class="text-[10px] text-zinc-500">大卡</span>
-        </div>
-        <div class="glass-card rounded-2xl p-3 text-center border border-zinc-800">
-          <span class="text-[10px] text-zinc-500 block">本週運動天數</span>
-          <span id="statWeekDays" class="text-base font-extrabold text-brand-cyan">0</span>
-          <span class="text-[10px] text-zinc-500">天</span>
-        </div>
-        <div class="glass-card rounded-2xl p-3 text-center border border-zinc-800">
-          <span class="text-[10px] text-zinc-500 block">累計重訓總重量</span>
-          <span id="statTotalVolume" class="text-base font-extrabold text-amber-400">0</span>
-          <span class="text-[10px] text-zinc-500">kg</span>
-        </div>
-      </div>
-
-      <!-- 近 14 天肌群平衡度 -->
-      <div class="glass-card rounded-2xl p-3.5 space-y-2 border border-zinc-800">
-        <span class="text-xs text-zinc-400 font-medium block">近 14 天肌群訓練平衡度</span>
-        <div id="muscleBalanceBars" class="grid grid-cols-6 gap-1.5 pt-1">
-          <!-- JS 動態生成柱狀圖 -->
-        </div>
-      </div>
-
-      <!-- 檢視模式切換 (預設依動作彙整) -->
-      <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
-        <div class="flex gap-1 bg-dark-card p-1 rounded-xl border border-zinc-800">
-          <button onclick="setHistoryViewMode('exercise')" id="btnHistModeExercise" class="px-3 py-1 rounded-lg text-xs font-semibold bg-brand-500 text-dark-bg">
-            📋 依動作彙整
-          </button>
-          <button onclick="setHistoryViewMode('date')" id="btnHistModeDate" class="px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white">
-            📅 依日期檢視
-          </button>
-          <button onclick="setHistoryViewMode('cardio')" id="btnHistModeCardio" class="px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white">
-            🏐 其他運動
-          </button>
-        </div>
-      </div>
-
-      <!-- 篩選列 (依動作彙整模式下可用肌群篩選) -->
-      <div id="historyCategoryFilterRow" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-        <!-- JS 動態肌群篩選按鈕 -->
-      </div>
-
-      <!-- 歷史紀錄列表容器 -->
-      <div id="historyListContainer" class="space-y-3">
-        <!-- JS 動態呈現彙整卡片 -->
-      </div>
-    </section>
-
-  </main>
-
-  <!-- 底部固定導覽列 (iPhone 拇指操作最佳化) -->
-  <nav class="fixed bottom-safe left-0 right-0 z-40 bg-dark-bg/95 backdrop-blur-lg border-t border-dark-border px-6 py-2">
-    <div class="max-w-md mx-auto grid grid-cols-3 gap-2">
-      <button onclick="switchTab('strength')" id="nav-strength" class="btn-active flex flex-col items-center justify-center py-1.5 text-brand-accent font-bold">
-        <div class="relative">
-          <span class="text-lg">🏋️</span>
-          <span id="navPendingBadge" class="absolute -top-1 -right-2 bg-brand-accent text-dark-bg text-[10px] font-extrabold rounded-full px-1 min-w-[16px] text-center hidden">0</span>
-        </div>
-        <span class="text-[11px] mt-0.5">重訓紀錄</span>
-      </button>
-
-      <button onclick="switchTab('cardio')" id="nav-cardio" class="btn-active flex flex-col items-center justify-center py-1.5 text-zinc-400 hover:text-zinc-200">
-        <span class="text-lg">🏐</span>
-        <span class="text-[11px] mt-0.5">其他運動</span>
-      </button>
-
-      <button onclick="switchTab('history')" id="nav-history" class="btn-active flex flex-col items-center justify-center py-1.5 text-zinc-400 hover:text-zinc-200">
-        <span class="text-lg">📊</span>
-        <span class="text-[11px] mt-0.5">數據歷史</span>
-      </button>
-    </div>
-  </nav>
-
-  <!-- 彈出視窗：雲端設定 (☁️) -->
-  <div id="cloudModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-md w-full p-5 space-y-4 border border-zinc-700">
-      <div class="flex justify-between items-center">
-        <h3 class="text-base font-bold text-white flex items-center gap-1.5">
-          <span>☁️ Firebase 雲端即時同步</span>
-        </h3>
-        <button onclick="closeModal('cloudModal')" class="text-zinc-400 hover:text-white text-lg">✕</button>
-      </div>
-
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="text-zinc-400 block mb-1">Firebase Realtime Database 網址</label>
-          <input type="text" id="cfgDbUrl" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white focus:outline-none">
-        </div>
-        <div>
-          <label class="text-zinc-400 block mb-1">個人專屬同步密鑰 (Sync Key)</label>
-          <input type="text" id="cfgSyncKey" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white focus:outline-none">
-          <p class="text-[10px] text-zinc-500 mt-1">預設密鑰：<code class="text-brand-accent">jianzhi_fit_2026</code>。所有輸入相同密鑰的裝置都會自動連線同步。</p>
-        </div>
-
-        <!-- 診斷狀態訊息 -->
-        <div id="cloudDiagnosticBox" class="p-2.5 rounded-xl bg-dark-input border border-zinc-800 text-[11px] text-zinc-300 space-y-1">
-          <div class="flex justify-between">
-            <span>連線狀態：</span>
-            <span id="diagSyncStatus" class="font-bold text-brand-accent">未連線</span>
-          </div>
-          <div class="flex justify-between">
-            <span>上次同步時間：</span>
-            <span id="diagLastSyncTime" class="text-zinc-400">無記錄</span>
-          </div>
-        </div>
-
-        <div class="pt-2 space-y-2">
-          <button onclick="saveCloudConfig()" class="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs">
-            💾 儲存設定並啟動即時同步
-          </button>
-          <button onclick="resetDefaultCloudConfig()" class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs">
-            ↺ 重設為預設密鑰 (jianzhi_fit_2026)
-          </button>
-          <button onclick="copyQuickSyncUrl()" class="w-full py-2 rounded-xl border border-zinc-700 text-brand-cyan text-xs hover:bg-zinc-800">
-            🔗 複製「免密鑰網址」分享至其他手機
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 彈出視窗：身體參數設定 (👤) -->
-  <div id="profileModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-sm w-full p-5 space-y-4 border border-zinc-700">
-      <div class="flex justify-between items-center">
-        <h3 class="text-base font-bold text-white">👤 個人身體基本參數</h3>
-        <button onclick="closeModal('profileModal')" class="text-zinc-400 hover:text-white">✕</button>
-      </div>
-
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="text-zinc-400 block mb-1">體重 (kg)</label>
-          <input type="number" id="profWeight" step="0.5" inputmode="decimal" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-        </div>
-        <div>
-          <label class="text-zinc-400 block mb-1">身高 (cm)</label>
-          <input type="number" id="profHeight" step="1" inputmode="numeric" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-        </div>
-        <div>
-          <label class="text-zinc-400 block mb-1">年齡 (歲)</label>
-          <input type="number" id="profAge" step="1" inputmode="numeric" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-        </div>
-        <p class="text-[10px] text-zinc-500">提示：系統會使用體重與 MET 公式精確估算各動作的卡路里消耗量。</p>
-        <button onclick="saveProfileConfig()" class="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs">
-          更新身體參數
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 彈出視窗：器材庫管理 (⚙️) -->
-  <div id="equipmentModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-md w-full p-5 space-y-4 border border-zinc-700 max-h-[85vh] flex flex-col">
-      <div class="flex justify-between items-center">
-        <h3 class="text-base font-bold text-white">⚙️ 常用自訂器材庫</h3>
-        <button onclick="closeModal('equipmentModal')" class="text-zinc-400 hover:text-white">✕</button>
-      </div>
-
-      <div class="flex gap-2">
-        <input type="text" id="newEquipInput" placeholder="輸入新增器材名稱" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-xs text-white">
-        <button onclick="addNewCustomEquipment()" class="shrink-0 px-3 py-2 bg-brand-500 text-dark-bg font-bold text-xs rounded-xl">新增</button>
-      </div>
-
-      <div class="overflow-y-auto flex-1 space-y-2 pr-1" id="customEquipmentListModal">
-        <!-- JS 動態生成 -->
-      </div>
-    </div>
-  </div>
-
-  <!-- 彈出視窗：資料備份與匯出 (💾) -->
-  <div id="backupModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-md w-full p-5 space-y-4 border border-zinc-700">
-      <div class="flex justify-between items-center">
-        <h3 class="text-base font-bold text-white">💾 資料備份與管理</h3>
-        <button onclick="closeModal('backupModal')" class="text-zinc-400 hover:text-white">✕</button>
-      </div>
-
-      <div class="space-y-3 text-xs">
-        <button onclick="exportDataJSON()" class="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium">
-          📥 匯出 JSON 備份檔案
-        </button>
-        <div>
-          <label class="text-zinc-400 block mb-1">匯入 JSON 備份檔</label>
-          <input type="file" id="importJsonFile" accept=".json" onchange="importDataJSON(event)" class="w-full text-zinc-400 text-xs">
-        </div>
-        <div class="border-t border-zinc-800 pt-3">
-          <button onclick="clearAllData()" class="w-full py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs border border-red-800/40">
-            ⚠️ 清除本地所有資料（雲端仍保留）
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 彈出視窗：歷史紀錄編輯 (✏️) -->
-  <div id="editLogModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="glass-card rounded-2xl max-w-md w-full p-5 space-y-4 border border-zinc-700 max-h-[90vh] flex flex-col">
-      <div class="flex justify-between items-center">
-        <h3 class="text-base font-bold text-white flex items-center gap-1.5" id="editModalTitle">
-          ✏️ 編輯紀錄
-        </h3>
-        <button onclick="closeModal('editLogModal')" class="text-zinc-400 hover:text-white">✕</button>
-      </div>
-
-      <div class="overflow-y-auto flex-1 space-y-3 pr-1" id="editLogContent">
-        <!-- JS 動態寫入表單 -->
-      </div>
-
-      <div class="pt-2 flex gap-2">
-        <button onclick="saveLogEdit()" class="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs">
-          💾 儲存修改
-        </button>
-        <button onclick="closeModal('editLogModal')" class="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-400 text-xs">
-          取消
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 全域提示訊息 Toast -->
-  <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-brand-600 text-white font-medium text-xs shadow-2xl transition-all duration-300 opacity-0 pointer-events-none flex items-center gap-2">
-    <span id="toastIcon">✓</span>
-    <span id="toastMsg">成功更新</span>
-  </div>
-
-
-  <!-- JavaScript 核心應用邏輯 -->
-  <script>
-    // 預設 Firebase 雲端連線參數
-    const DEFAULT_DB_URL = "https://fitness-tracker-54432-default-rtdb.asia-southeast1.firebasedatabase.app";
-    const DEFAULT_SYNC_KEY = "jianzhi_fit_2026";
-
-    // 六大肌群定義與常見器材 (台灣慣用語)
-    const MUSCLE_GROUPS = ['胸部', '背部', '腿部', '肩部', '手臂', '核心'];
-    
-    const BUILTIN_EQUIPMENT = {
-      '胸部': ['槓鈴臥推', '上斜槓鈴臥推', '啞鈴臥推', '上斜啞鈴臥推', '雙槓屈臂伸', '蝴蝶機夾胸', '滑輪飛鳥', '坐姿胸推機', '俯臥撐'],
-      '背部': ['滑輪下拉', '坐姿划船機', '槓鈴划船', '啞鈴划船', '引體向上', '反向蝴蝶機', '高位滑輪拉背', 'T桿划船', '直臂下拉'],
-      '腿部': ['槓鈴深蹲', '哈克深蹲機', '腿推機 (Leg Press)', '腿伸展機 (Leg Extension)', '腿彎舉機 (Leg Curl)', '史密斯深蹲', '臀推機 (Hip Thrust)', '羅馬尼亞硬舉'],
-      '肩部': ['站姿槓鈴肩推', '坐姿啞鈴肩推', '啞鈴側平舉', '滑輪側平舉', '啞鈴前平舉', '坐姿肩推機', '面拉 (Face Pull)', '俯身啞鈴飛鳥'],
-      '手臂': ['啞鈴二頭彎舉', '槓鈴二頭彎舉', '牧師椅彎舉機', '滑輪二頭彎舉', '滑輪三頭下拉', '仰臥三頭伸展', '繩索三頭下拉'],
-      '核心': ['棒式 (Plank)', '仰臥起坐', '懸垂舉腿', '滾輪推腹', '羅馬椅背伸展', '腹克機', '俄式扭轉']
-    };
-
-    // 其他運動 (有氧/球類) MET 數值定義
-    const CARDIO_SPORTS = [
-      { id: 'volleyball_match', name: '排球 (比賽/高強度)', met: 6.0, icon: '🏐' },
-      { id: 'volleyball_casual', name: '排球 (休閒/練習)', met: 4.0, icon: '🏐' },
-      { id: 'badminton', name: '羽球 (單/雙打)', met: 5.5, icon: '🏸' },
-      { id: 'running', name: '跑步 (中速)', met: 8.0, icon: '🏃' },
-      { id: 'incline_walk', name: '坡度快走', met: 5.0, icon: '🚶' },
-      { id: 'spinning', name: '飛輪 / 騎車', met: 6.8, icon: '🚴' },
-      { id: 'swimming', name: '游泳', met: 7.0, icon: '🏊' },
-      { id: 'hiking', name: '登山負重', met: 6.5, icon: '🧗' }
-    ];
-
-    // 應用程式全域狀態 State
-    let state = {
-      dbUrl: localStorage.getItem('ft_db_url') || DEFAULT_DB_URL,
-      syncKey: localStorage.getItem('ft_sync_key') || DEFAULT_SYNC_KEY,
-      profile: JSON.parse(localStorage.getItem('ft_profile')) || { weight: 85, height: 186, age: 43 },
-      logs: JSON.parse(localStorage.getItem('ft_logs')) || [],
-      pendingList: JSON.parse(localStorage.getItem('ft_pending')) || [],
-      deletedIds: JSON.parse(localStorage.getItem('ft_deleted')) || {},
-      customEquipment: JSON.parse(localStorage.getItem('ft_custom_equip')) || [],
-      
-      // UI 當前狀態
-      activeTab: 'strength',
-      selectedCategory: '胸部',
-      selectedEquipment: '槓鈴臥推',
-      inputWeight: 60,
-      inputReps: 10,
-      inputAddSetsCount: 1,
-      selectedCardioSport: 'volleyball_match',
-      cardioMinutes: 60,
-      historyViewMode: 'exercise', // 'exercise', 'date', 'cardio'
-      historyFilterCategory: '全部',
-      editingLogId: null,
-
-      // 同步狀態管理
-      lastSyncTime: null,
-      syncStatus: 'idle', // 'idle', 'syncing', 'success', 'error'
-      sseEventSource: null
-    };
-
-    // 網址參數 Key 檢測
-    (function checkUrlParams() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const keyFromUrl = urlParams.get('key');
-      if (keyFromUrl) {
-        state.syncKey = keyFromUrl;
-        localStorage.setItem('ft_sync_key', keyFromUrl);
-      }
-    })();
-
-    // 初始化網頁應用程式
-    window.addEventListener('DOMContentLoaded', () => {
-      initUI();
-      renderAll();
-      initFirebaseSync();
-    });
-
-    // 初始化 UI 元件與事件
-    function initUI() {
-      renderCategoryCapsules();
-      renderEquipmentBadges();
-      renderCardioGrid();
-      
-      // 點擊外部自動隱藏搜尋建議
-      document.addEventListener('click', (e) => {
-        if (!e.target.closest('#equipmentInput') && !e.target.closest('#equipmentAutocomplete')) {
-          document.getElementById('equipmentAutocomplete').classList.add('hidden');
-        }
-      });
-    }
-
-    // 主渲染流程
-    function renderAll() {
-      renderPendingList();
-      renderAiRecommendCard();
-      renderHistoryView();
-      updateStatDashboard();
-      updateBadgeCounts();
-    }
-
-    // 1. 肌群與器材選取邏輯
-    function renderCategoryCapsules() {
-      const container = document.getElementById('muscleCategoryCapsules');
-      container.innerHTML = MUSCLE_GROUPS.map(cat => {
-        const isSelected = cat === state.selectedCategory;
-        return `
-          <button onclick="selectCategory('${cat}')" 
-            class="btn-active shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              isSelected 
-                ? 'bg-brand-500 text-dark-bg shadow-md shadow-brand-500/20' 
-                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-            }">
-            ${cat}
-          </button>
-        `;
-      }).join('');
-
-      // 同時生成歷史紀錄的類別篩選膠囊
-      const histFilterRow = document.getElementById('historyCategoryFilterRow');
-      const allCats = ['全部', ...MUSCLE_GROUPS];
-      histFilterRow.innerHTML = allCats.map(cat => {
-        const isSelected = cat === state.historyFilterCategory;
-        return `
-          <button onclick="setHistoryCategoryFilter('${cat}')" 
-            class="btn-active shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-              isSelected 
-                ? 'bg-brand-500/20 text-brand-accent border border-brand-500/40' 
-                : 'bg-dark-card text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-            }">
-            ${cat}
-          </button>
-        `;
-      }).join('');
-    }
-
-    function selectCategory(cat) {
-      state.selectedCategory = cat;
-      renderCategoryCapsules();
-      // 自動挑選該肌群第一個器材
-      const list = getEquipmentListByCategory(cat);
-      if (list.length > 0) {
-        selectEquipment(list[0]);
-      }
-      renderEquipmentBadges();
-    }
-
-    function getEquipmentListByCategory(cat) {
-      const builtin = BUILTIN_EQUIPMENT[cat] || [];
-      const custom = state.customEquipment.filter(e => e.category === cat).map(e => e.name);
-      return [...new Set([...builtin, ...custom])];
-    }
-
-    function renderEquipmentBadges() {
-      const container = document.getElementById('equipmentQuickBadges');
-      const list = getEquipmentListByCategory(state.selectedCategory);
-
-      container.innerHTML = list.map(name => {
-        const isSelected = name === state.selectedEquipment;
-        return `
-          <button onclick="selectEquipment('${name}')" 
-            class="btn-active text-xs px-2.5 py-1 rounded-lg transition-all border ${
-              isSelected 
-                ? 'bg-brand-500/20 text-brand-accent border-brand-500/50 font-semibold' 
-                : 'bg-dark-input text-zinc-300 border-zinc-800 hover:border-zinc-700'
-            }">
-            ${name}
-          </button>
-        `;
-      }).join('');
-    }
-
-    function selectEquipment(name) {
-      state.selectedEquipment = name;
-      document.getElementById('equipmentInput').value = name;
-      renderEquipmentBadges();
-      checkLastRecordBadge(name);
-    }
-
-    function checkLastRecordBadge(name) {
-      const badge = document.getElementById('lastRecordBadge');
-      const btnFill = document.getElementById('btnFillLast');
-      
-      // 在歷史紀錄中找該動作最新的上一次紀錄
-      const pastLogs = state.logs
-        .filter(l => l.type === 'strength' && l.name === name)
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      if (pastLogs.length > 0) {
-        const last = pastLogs[0];
-        const lastSetsStr = last.setList ? last.setList.map(s => `${s.weight}kg×${s.reps}`).join('、') : `${last.weight}kg×${last.reps}`;
-        badge.innerText = `上次 (${last.date}): ${lastSetsStr}`;
-        badge.classList.remove('hidden');
-        btnFill.classList.remove('hidden');
-        badge.dataset.lastWeight = last.setList ? last.setList[0].weight : last.weight;
-        badge.dataset.lastReps = last.setList ? last.setList[0].reps : last.reps;
-      } else {
-        badge.classList.add('hidden');
-        btnFill.classList.add('hidden');
-      }
-    }
-
-    function quickFillLastRecord() {
-      const badge = document.getElementById('lastRecordBadge');
-      if (badge.dataset.lastWeight && badge.dataset.lastReps) {
-        state.inputWeight = parseFloat(badge.dataset.lastWeight);
-        state.inputReps = parseInt(badge.dataset.lastReps);
-        document.getElementById('inputWeight').value = state.inputWeight;
-        document.getElementById('inputReps').value = state.inputReps;
-        showToast('已帶入上次訓練重量與次數');
-      }
-    }
-
-    function handleEquipmentSearch(val) {
-      const list = getEquipmentListByCategory(state.selectedCategory);
-      const matched = list.filter(item => item.toLowerCase().includes(val.toLowerCase()));
-      const box = document.getElementById('equipmentAutocomplete');
-
-      if (val.trim() && matched.length > 0) {
-        box.innerHTML = matched.map(m => `
-          <div onclick="selectEquipment('${m}'); document.getElementById('equipmentAutocomplete').classList.add('hidden');" 
-            class="px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800/50 last:border-none">
-            ${m}
-          </div>
-        `).join('');
-        box.classList.remove('hidden');
-      } else {
-        box.classList.add('hidden');
-      }
-      state.selectedEquipment = val;
-    }
-
-    // 微調重量次數
-    function adjustInput(id, delta) {
-      const input = document.getElementById(id);
-      let val = parseFloat(input.value) || 0;
-      val = Math.max(0, val + delta);
-      // 重量留 1 位小數，次數為整數
-      input.value = id === 'inputWeight' ? (Math.round(val * 2) / 2) : Math.round(val);
-      if (id === 'inputWeight') state.inputWeight = parseFloat(input.value);
-      if (id === 'inputReps') state.inputReps = parseInt(input.value);
-    }
-
-    function setAddSetsCount(count) {
-      state.inputAddSetsCount = count;
-      document.querySelectorAll('.set-count-btn').forEach(btn => {
-        if (parseInt(btn.dataset.count) === count) {
-          btn.className = 'set-count-btn px-2 py-0.5 rounded text-xs border border-brand-500 bg-brand-500/20 text-brand-accent font-semibold';
-        } else {
-          btn.className = 'set-count-btn px-2 py-0.5 rounded text-xs border border-zinc-700 bg-dark-input text-zinc-400';
-        }
-      });
-    }
-
-
-    // 2. 今日待存清單邏輯 (核心亮點：同動作彙整，內建快捷加一組)
-    function addToPendingList() {
-      const equipName = document.getElementById('equipmentInput').value.trim() || state.selectedEquipment;
-      const weight = parseFloat(document.getElementById('inputWeight').value) || 0;
-      const reps = parseInt(document.getElementById('inputReps').value) || 1;
-      const addCount = state.inputAddSetsCount || 1;
-
-      if (!equipName) {
-        showToast('請選擇或輸入動作名稱', '❌');
-        return;
-      }
-
-      // 檢查待存清單中是否已存在該動作
-      let existingIndex = state.pendingList.findIndex(item => item.name === equipName);
-      
-      const newSets = Array.from({ length: addCount }, () => ({ weight, reps }));
-
-      if (existingIndex >= 0) {
-        // 合併至既有動作卡片中
-        state.pendingList[existingIndex].setList.push(...newSets);
-      } else {
-        // 新增動作卡片
-        state.pendingList.push({
-          id: 'pending_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-          name: equipName,
-          category: state.selectedCategory,
-          setList: newSets
-        });
-      }
-
-      saveLocalState();
-      renderPendingList();
-      showToast(`已加入「${equipName}」${addCount} 組至待存清單`);
-    }
-
-    function renderPendingList() {
-      const container = document.getElementById('pendingListContainer');
-      const badgeCount = document.getElementById('pendingBadgeCount');
-      const btnClear = document.getElementById('btnClearPending');
-      const summaryBox = document.getElementById('pendingSummaryBox');
-
-      if (state.pendingList.length === 0) {
-        container.innerHTML = `
-          <div class="text-center py-8 text-zinc-500 text-xs">
-            目前暫無待儲存的動作。請在上方選擇器材並點擊「＋ 加入今日待存清單」。
-          </div>
-        `;
-        badgeCount.innerText = '0 動作';
-        btnClear.classList.add('hidden');
-        summaryBox.classList.add('hidden');
-        return;
-      }
-
-      badgeCount.innerText = `${state.pendingList.length} 個動作`;
-      btnClear.classList.remove('hidden');
-      summaryBox.classList.remove('hidden');
-
-      // 依肌群進行分門別類排序
-      const categoryMap = {};
-      MUSCLE_GROUPS.forEach(g => categoryMap[g] = []);
-      categoryMap['未分類'] = [];
-
-      state.pendingList.forEach(item => {
-        const cat = MUSCLE_GROUPS.includes(item.category) ? item.category : '未分類';
-        categoryMap[cat].push(item);
-      });
-
-      let html = '';
-      let globalTotalSets = 0;
-      let globalTotalVolume = 0;
-
-      Object.keys(categoryMap).forEach(cat => {
-        const items = categoryMap[cat];
-        if (items.length === 0) return;
-
-        html += `
-          <div class="space-y-2">
-            <div class="text-xs font-semibold text-brand-accent flex items-center gap-1">
-              <span>🏷️ ${cat}</span>
-              <span class="text-[10px] text-zinc-500">(${items.length} 動作)</span>
-            </div>
-            
-            <div class="space-y-2.5">
-        `;
-
-        items.forEach(item => {
-          const itemVolume = item.setList.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-          globalTotalSets += item.setList.length;
-          globalTotalVolume += itemVolume;
-
-          html += `
-            <div class="bg-dark-input rounded-xl p-3 border border-zinc-800 space-y-3">
-              <!-- 卡片頂部：動作名稱與全卡片刪除 -->
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-sm text-white">${item.name}</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">${item.setList.length}組 · ${itemVolume.toLocaleString()}kg</span>
-                </div>
-                <button onclick="removePendingItem('${item.id}')" class="text-xs text-zinc-500 hover:text-red-400 px-1.5 py-0.5">刪除動作</button>
-              </div>
-
-              <!-- 逐組明細 -->
-              <div class="space-y-1.5 border-t border-zinc-800/60 pt-2">
-                ${item.setList.map((set, setIdx) => `
-                  <div class="flex items-center justify-between text-xs bg-zinc-900/80 px-2.5 py-1.5 rounded-lg border border-zinc-800">
-                    <span class="text-zinc-400 text-[11px] font-mono w-14">第 ${setIdx + 1} 組</span>
-                    
-                    <div class="flex items-center gap-2">
-                      <div class="flex items-center gap-1">
-                        <input type="number" step="0.5" value="${set.weight}" 
-                          onchange="updatePendingSet('${item.id}', ${setIdx}, 'weight', this.value)"
-                          class="w-12 bg-zinc-800 text-center text-white font-bold rounded py-0.5 focus:outline-none focus:border-brand-500 border border-transparent">
-                        <span class="text-zinc-500 text-[10px]">kg</span>
-                      </div>
-                      <span class="text-zinc-600">×</span>
-                      <div class="flex items-center gap-1">
-                        <input type="number" step="1" value="${set.reps}" 
-                          onchange="updatePendingSet('${item.id}', ${setIdx}, 'reps', this.value)"
-                          class="w-10 bg-zinc-800 text-center text-white font-bold rounded py-0.5 focus:outline-none focus:border-brand-500 border border-transparent">
-                        <span class="text-zinc-500 text-[10px]">下</span>
-                      </div>
-                    </div>
-
-                    <div class="flex items-center gap-1">
-                      <button onclick="duplicatePendingSet('${item.id}', ${setIdx})" title="複製此組" class="text-zinc-500 hover:text-brand-accent px-1">📋</button>
-                      <button onclick="removePendingSet('${item.id}', ${setIdx})" title="刪除此組" class="text-zinc-500 hover:text-red-400 px-1">✕</button>
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-
-              <!-- 卡片底部：＋ 再加一組 (快捷輸入列) -->
-              <div class="pt-1 flex items-center justify-between gap-2 bg-zinc-900/40 p-1.5 rounded-xl border border-dashed border-zinc-800">
-                <span class="text-[11px] text-zinc-400 shrink-0">＋ 再加一組：</span>
-                <div class="flex items-center gap-1">
-                  <input type="number" step="0.5" id="quickAddW_${item.id}" value="${item.setList.length ? item.setList[item.setList.length - 1].weight : 60}" 
-                    class="w-12 bg-zinc-800 text-center text-xs text-white rounded py-0.5 border border-zinc-700">
-                  <span class="text-zinc-500 text-[10px]">kg</span>
-                  <input type="number" step="1" id="quickAddR_${item.id}" value="${item.setList.length ? item.setList[item.setList.length - 1].reps : 10}" 
-                    class="w-10 bg-zinc-800 text-center text-xs text-white rounded py-0.5 border border-zinc-700">
-                  <span class="text-zinc-500 text-[10px]">下</span>
-                </div>
-                <button onclick="quickAddSetToItem('${item.id}')" class="btn-active px-2.5 py-1 bg-brand-500/20 text-brand-accent hover:bg-brand-500 hover:text-dark-bg font-bold text-xs rounded-lg border border-brand-500/30">
-                  ＋ 加入
-                </button>
-              </div>
-            </div>
-          `;
-        });
-
-        html += `</div></div>`;
-      });
-
-      container.innerHTML = html;
-
-      // 估算熱量與總結計算
-      document.getElementById('pendingTotalSets').innerText = `${globalTotalSets} 組`;
-      document.getElementById('pendingTotalVolume').innerText = `${globalTotalVolume.toLocaleString()} kg`;
-      
-      // 熱量公式：重訓基礎 MET 5.5 + 每 1000kg 訓練量加成 15 大卡
-      const bodyWeight = state.profile.weight || 85;
-      const estDurationMin = globalTotalSets * 2.5; // 每組約 2.5 分鐘
-      const baseCal = (5.5 * 3.5 * bodyWeight / 200) * estDurationMin;
-      const volumeBonus = (globalTotalVolume / 1000) * 15;
-      const totalEstCal = Math.round(baseCal + volumeBonus);
-
-      document.getElementById('pendingTotalEstCal').innerText = `${totalEstCal} 大卡`;
-    }
-
-    // 快捷加入單組至卡片
-    function quickAddSetToItem(itemId) {
-      const item = state.pendingList.find(i => i.id === itemId);
-      if (!item) return;
-
-      const wInput = document.getElementById(`quickAddW_${itemId}`);
-      const rInput = document.getElementById(`quickAddR_${itemId}`);
-
-      const weight = parseFloat(wInput.value) || 0;
-      const reps = parseInt(rInput.value) || 1;
-
-      item.setList.push({ weight, reps });
-      saveLocalState();
-      renderPendingList();
-      showToast(`已為「${item.name}」加入第 ${item.setList.length} 組`);
-    }
-
-    function updatePendingSet(itemId, setIdx, field, val) {
-      const item = state.pendingList.find(i => i.id === itemId);
-      if (item && item.setList[setIdx]) {
-        item.setList[setIdx][field] = field === 'weight' ? parseFloat(val) || 0 : parseInt(val) || 1;
-        saveLocalState();
-        renderPendingList();
-      }
-    }
-
-    function duplicatePendingSet(itemId, setIdx) {
-      const item = state.pendingList.find(i => i.id === itemId);
-      if (item && item.setList[setIdx]) {
-        const copySet = { ...item.setList[setIdx] };
-        item.setList.splice(setIdx + 1, 0, copySet);
-        saveLocalState();
-        renderPendingList();
-      }
-    }
-
-    function removePendingSet(itemId, setIdx) {
-      const item = state.pendingList.find(i => i.id === itemId);
-      if (item) {
-        item.setList.splice(setIdx, 1);
-        if (item.setList.length === 0) {
-          state.pendingList = state.pendingList.filter(i => i.id !== itemId);
-        }
-        saveLocalState();
-        renderPendingList();
-      }
-    }
-
-    function removePendingItem(itemId) {
-      state.pendingList = state.pendingList.filter(i => i.id !== itemId);
-      saveLocalState();
-      renderPendingList();
-      showToast('已移除動作');
-    }
-
-    function clearPendingList() {
-      if (confirm('確定要清空今日待存清單嗎？')) {
-        state.pendingList = [];
-        saveLocalState();
-        renderPendingList();
-      }
-    }
-
-    // 提交今日全部訓練紀錄 (同日同動作自動彙整儲存)
-    function commitPendingList() {
-      if (state.pendingList.length === 0) return;
-
-      const todayStr = getTodayDateStr();
-      const actualCalInputValue = document.getElementById('pendingActualCalInput').value.trim();
-      const userActualCal = actualCalInputValue !== '' ? parseFloat(actualCalInputValue) : null;
-
-      let grandTotalVolume = 0;
-      state.pendingList.forEach(item => {
-        grandTotalVolume += item.setList.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-      });
-
-      state.pendingList.forEach(item => {
-        const totalVolume = item.setList.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-        const maxWeight = Math.max(...item.setList.map(s => s.weight));
-        const totalReps = item.setList.reduce((sum, s) => sum + s.reps, 0);
-        const totalSets = item.setList.length;
-
-        // 計算個體卡路里
-        const estMin = totalSets * 2.5;
-        const bodyWeight = state.profile.weight || 85;
-        const estCal = Math.round(((5.5 * 3.5 * bodyWeight / 200) * estMin) + ((totalVolume / 1000) * 15));
-        
-        let finalCal = estCal;
-        if (userActualCal && grandTotalVolume > 0) {
-          // 依訓練量按比例分攤實際卡路里
-          finalCal = Math.round(userActualCal * (totalVolume / grandTotalVolume));
-        }
-
-        // 檢查今天是否已經存過同名動作
-        const existingLogIndex = state.logs.findIndex(l => l.type === 'strength' && l.date === todayStr && l.name === item.name);
-
-        if (existingLogIndex >= 0) {
-          // 合併進今天現有的紀錄中
-          const existing = state.logs[existingLogIndex];
-          existing.setList = [...(existing.setList || []), ...item.setList];
-          existing.totalSets = existing.setList.length;
-          existing.totalReps = existing.setList.reduce((sum, s) => sum + s.reps, 0);
-          existing.totalVolume = existing.setList.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-          existing.maxWeight = Math.max(...existing.setList.map(s => s.weight));
-          existing.calories += finalCal;
-          existing.timestamp = Date.now();
-        } else {
-          // 新增今日紀錄
-          const newLog = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            type: 'strength',
-            name: item.name,
-            category: item.category,
-            date: todayStr,
-            timestamp: Date.now(),
-            setList: item.setList,
-            totalSets: totalSets,
-            totalReps: totalReps,
-            totalVolume: totalVolume,
-            maxWeight: maxWeight,
-            calories: finalCal
-          };
-          state.logs.unshift(newLog);
-        }
-      });
-
-      // 清空待存清單與大卡輸入框
-      state.pendingList = [];
-      document.getElementById('pendingActualCalInput').value = '';
-      
-      saveLocalState();
-      pushDataToCloud(); // 立即同步至雲端
-      renderAll();
-      showToast('🎉 今日訓練紀錄已儲存並同步至雲端！');
-    }
-
-
-    // 3. 其他運動 (球類/有氧) 邏輯
-    function renderCardioGrid() {
-      const container = document.getElementById('cardioSportsGrid');
-      container.innerHTML = CARDIO_SPORTS.map(s => {
-        const isSelected = s.id === state.selectedCardioSport;
-        return `
-          <button onclick="selectCardioSport('${s.id}')" 
-            class="btn-active p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
-              isSelected 
-                ? 'bg-brand-500/20 border-brand-500 text-white shadow-lg' 
-                : 'bg-dark-input border-zinc-800 text-zinc-300 hover:border-zinc-700'
-            }">
-            <span class="text-xl mb-1">${s.icon}</span>
-            <div>
-              <span class="text-xs font-bold block">${s.name}</span>
-              <span class="text-[10px] text-zinc-500">MET: ${s.met}</span>
-            </div>
-          </button>
-        `;
-      }).join('');
-      calcCardioCalories();
-    }
-
-    function selectCardioSport(id) {
-      state.selectedCardioSport = id;
-      renderCardioGrid();
-    }
-
-    function updateCardioMinutes(val) {
-      state.cardioMinutes = parseInt(val);
-      document.getElementById('cardioMinutesRange').value = state.cardioMinutes;
-      document.getElementById('cardioMinutesVal').innerText = `${state.cardioMinutes} 分鐘`;
-      calcCardioCalories();
-    }
-
-    function calcCardioCalories() {
-      const sport = CARDIO_SPORTS.find(s => s.id === state.selectedCardioSport) || CARDIO_SPORTS[0];
-      const weight = state.profile.weight || 85;
-      const est = Math.round((sport.met * 3.5 * weight / 200) * state.cardioMinutes);
-      document.getElementById('cardioEstCal').innerText = `${est} 大卡`;
-    }
-
-    function saveCardioLog() {
-      const sport = CARDIO_SPORTS.find(s => s.id === state.selectedCardioSport) || CARDIO_SPORTS[0];
-      const actualCalInput = document.getElementById('cardioActualCal').value.trim();
-      
-      const estCal = parseInt(document.getElementById('cardioEstCal').innerText) || 300;
-      const finalCal = actualCalInput !== '' ? parseFloat(actualCalInput) : estCal;
-
-      const newLog = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        type: 'cardio',
-        name: sport.name,
-        category: '有氧球類',
-        date: getTodayDateStr(),
-        timestamp: Date.now(),
-        duration: state.cardioMinutes,
-        calories: finalCal
-      };
-
-      state.logs.unshift(newLog);
-      document.getElementById('cardioActualCal').value = '';
-      saveLocalState();
-      pushDataToCloud();
-      renderAll();
-      showToast(`已儲存「${sport.name}」${state.cardioMinutes} 分鐘！`);
-    }
-
-
-    // 4. 數據歷史檢視邏輯 (預設依動作彙整視角)
-    function setHistoryViewMode(mode) {
-      state.historyViewMode = mode;
-      document.getElementById('btnHistModeExercise').className = mode === 'exercise' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-brand-500 text-dark-bg' : 'px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white';
-      document.getElementById('btnHistModeDate').className = mode === 'date' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-brand-500 text-dark-bg' : 'px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white';
-      document.getElementById('btnHistModeCardio').className = mode === 'cardio' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-brand-500 text-dark-bg' : 'px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white';
-
-      const filterRow = document.getElementById('historyCategoryFilterRow');
-      if (mode === 'exercise') {
-        filterRow.classList.remove('hidden');
-      } else {
-        filterRow.classList.add('hidden');
-      }
-
-      renderHistoryView();
-    }
-
-    function setHistoryCategoryFilter(cat) {
-      state.historyFilterCategory = cat;
-      renderCategoryCapsules();
-      renderHistoryView();
-    }
-
-    function renderHistoryView() {
-      const container = document.getElementById('historyListContainer');
-      
-      if (state.logs.length === 0) {
-        container.innerHTML = `<div class="text-center py-10 text-zinc-500 text-xs">尚無歷史運動紀錄</div>`;
-        return;
-      }
-
-      if (state.historyViewMode === 'exercise') {
-        renderExerciseAggregatedHistory(container);
-      } else if (state.historyViewMode === 'date') {
-        renderDateHistory(container);
-      } else if (state.historyViewMode === 'cardio') {
-        renderCardioHistory(container);
-      }
-    }
-
-    // 依動作彙整歷史 (核心亮點卡片)
-    function renderExerciseAggregatedHistory(container) {
-      const strengthLogs = state.logs.filter(l => l.type === 'strength');
-
-      if (strengthLogs.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-zinc-500 text-xs">尚無重訓紀錄</div>`;
-        return;
-      }
-
-      // 依動作名稱分組 Group By Exercise Name
-      const exerciseGroupMap = {};
-      strengthLogs.forEach(log => {
-        if (!exerciseGroupMap[log.name]) {
-          exerciseGroupMap[log.name] = {
-            name: log.name,
-            category: log.category || '重訓',
-            logs: []
-          };
-        }
-        exerciseGroupMap[log.name].logs.push(log);
-      });
-
-      let groups = Object.values(exerciseGroupMap);
-
-      // 肌群過濾
-      if (state.historyFilterCategory !== '全部') {
-        groups = groups.filter(g => g.category === state.historyFilterCategory);
-      }
-
-      if (groups.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-zinc-500 text-xs">該類別尚無動作紀錄</div>`;
-        return;
-      }
-
-      container.innerHTML = groups.map(group => {
-        // 排序：最新日期在最前
-        group.logs.sort((a, b) => b.timestamp - a.timestamp);
-
-        // 計算歷史最高 PR 重量
-        let maxPR = 0;
-        group.logs.forEach(l => {
-          if (l.setList) {
-            l.setList.forEach(s => { if (s.weight > maxPR) maxPR = s.weight; });
-          } else if (l.maxWeight > maxPR) {
-            maxPR = l.maxWeight;
-          }
-        });
-
-        const cardId = 'histGroup_' + group.name.replace(/\s+/g, '_');
-        const showLimit = 3;
-        const totalLogsCount = group.logs.length;
-
-        return `
-          <div class="glass-card rounded-2xl p-4 space-y-3 border border-zinc-800">
-            <!-- 動作標題與 PR 徽章 -->
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base text-white">${group.name}</span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-accent border border-brand-500/30">${group.category}</span>
-              </div>
-              <div class="flex items-center gap-2 text-xs">
-                <span class="text-amber-400 font-bold">🏆 PR: ${maxPR} kg</span>
-                <span class="text-zinc-500 text-[11px]">(${totalLogsCount} 次紀錄)</span>
-              </div>
-            </div>
-
-            <!-- 歷史紀錄列表 -->
-            <div class="space-y-2 border-t border-zinc-800/80 pt-2 font-sans" id="${cardId}">
-              ${group.logs.map((log, index) => {
-                const isHidden = index >= showLimit;
-                const sets = log.setList || [{ weight: log.weight || 0, reps: log.reps || 0 }];
-                const setsDetail = sets.map((s, idx) => `<span class="bg-zinc-800/80 px-1.5 py-0.5 rounded text-[10px] text-zinc-300">#${idx+1} ${s.weight}kg×${s.reps}</span>`).join(' ');
-
-                return `
-                  <div class="${isHidden ? 'hidden extra-hist-item' : ''} bg-dark-input/80 p-2.5 rounded-xl border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div class="space-y-1">
-                      <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold text-zinc-200">${log.date}</span>
-                        <span class="text-[10px] text-zinc-400 font-mono">(${sets.length}組 · ${(log.totalVolume || 0).toLocaleString()}kg · ${log.calories}大卡)</span>
-                      </div>
-                      <div class="flex flex-wrap gap-1">
-                        ${setsDetail}
-                      </div>
-                    </div>
-
-                    <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                      <button onclick="openEditLogModal('${log.id}')" class="text-xs text-zinc-400 hover:text-brand-accent px-1.5 py-0.5 rounded bg-zinc-800">✏️ 編輯</button>
-                      <button onclick="deleteLog('${log.id}')" class="text-xs text-zinc-500 hover:text-red-400 px-1.5 py-0.5 rounded bg-zinc-800">🗑️</button>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-
-            <!-- 展開全部按鈕 -->
-            ${totalLogsCount > showLimit ? `
-              <button onclick="toggleExpandHistory('${cardId}', this, ${totalLogsCount})" class="w-full py-1 text-center text-xs text-zinc-400 hover:text-brand-accent border-t border-dashed border-zinc-800 mt-1">
-                ▼ 展開全部歷史紀錄 (共 ${totalLogsCount} 次)
-              </button>
-            ` : ''}
-          </div>
-        `;
-      }).join('');
-    }
-
-    function toggleExpandHistory(containerId, btn, totalCount) {
-      const container = document.getElementById(containerId);
-      const hiddenItems = container.querySelectorAll('.extra-hist-item');
-      
-      const isExpanded = btn.dataset.expanded === 'true';
-      if (isExpanded) {
-        hiddenItems.forEach(el => el.classList.add('hidden'));
-        btn.innerText = `▼ 展開全部歷史紀錄 (共 ${totalCount} 次)`;
-        btn.dataset.expanded = 'false';
-      } else {
-        hiddenItems.forEach(el => el.classList.remove('hidden'));
-        btn.innerText = `▲ 折疊歷史紀錄`;
-        btn.dataset.expanded = 'true';
-      }
-    }
-
-    // 依日期檢視模式
-    function renderDateHistory(container) {
-      const dateMap = {};
-      state.logs.forEach(log => {
-        if (!dateMap[log.date]) dateMap[log.date] = [];
-        dateMap[log.date].push(log);
-      });
-
-      const dates = Object.keys(dateMap).sort((a, b) => new Date(b) - new Date(a));
-
-      container.innerHTML = dates.map(date => {
-        const logs = dateMap[date];
-        const dayCal = logs.reduce((sum, l) => sum + (l.calories || 0), 0);
-
-        return `
-          <div class="glass-card rounded-2xl p-4 space-y-3 border border-zinc-800">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span class="font-bold text-sm text-white">${date}</span>
-              <span class="text-xs font-bold text-brand-accent">總消耗：${dayCal} 大卡</span>
-            </div>
-
-            <div class="space-y-2">
-              ${logs.map(log => {
-                if (log.type === 'strength') {
-                  const sets = log.setList || [];
-                  return `
-                    <div class="bg-dark-input p-2.5 rounded-xl border border-zinc-800 flex justify-between items-center text-xs">
-                      <div>
-                        <div class="font-bold text-zinc-200">${log.name} <span class="text-[10px] text-zinc-500">(${log.category})</span></div>
-                        <div class="text-[11px] text-zinc-400 mt-0.5">${sets.length} 組 · 總訓練量 ${log.totalVolume}kg · ${log.calories}大卡</div>
-                      </div>
-                      <div class="flex gap-1.5">
-                        <button onclick="openEditLogModal('${log.id}')" class="text-zinc-400 hover:text-white">✏️</button>
-                        <button onclick="deleteLog('${log.id}')" class="text-zinc-500 hover:text-red-400">🗑️</button>
-                      </div>
-                    </div>
-                  `;
-                } else {
-                  return `
-                    <div class="bg-dark-input p-2.5 rounded-xl border border-zinc-800 flex justify-between items-center text-xs">
-                      <div>
-                        <div class="font-bold text-brand-cyan">${log.name}</div>
-                        <div class="text-[11px] text-zinc-400 mt-0.5">${log.duration} 分鐘 · ${log.calories}大卡</div>
-                      </div>
-                      <div class="flex gap-1.5">
-                        <button onclick="openEditLogModal('${log.id}')" class="text-zinc-400 hover:text-white">✏️</button>
-                        <button onclick="deleteLog('${log.id}')" class="text-zinc-500 hover:text-red-400">🗑️</button>
-                      </div>
-                    </div>
-                  `;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>健身數據筆記</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0f14',
+                        cardBg: '#131922',
+                        cardBorder: '#1f293d',
+                        brandAccent: '#10b981', // Emerald primary
+                        brandHover: '#059669',
+                    }
                 }
-              }).join('')}
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
+            }
+        }
+    </script>
+    <style>
+        /* iOS Safe Area Adjustments */
+        body {
+            background-color: #0b0f14;
+            color: #f3f4f6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+        }
+        .safe-pb {
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+        }
+        .sticky-top-safe {
+            padding-top: env(safe-area-inset-top);
+        }
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f293d;
+            border-radius: 4px;
+        }
+        /* Touch active response */
+        .btn-active:active {
+            transform: scale(0.96);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
 
-    // 其他運動歷史模式
-    function renderCardioHistory(container) {
-      const cardioLogs = state.logs.filter(l => l.type === 'cardio').sort((a, b) => b.timestamp - a.timestamp);
-
-      if (cardioLogs.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-zinc-500 text-xs">尚無球類與有氧運動紀錄</div>`;
-        return;
-      }
-
-      container.innerHTML = cardioLogs.map(log => `
-        <div class="glass-card rounded-2xl p-3.5 border border-zinc-800 flex justify-between items-center text-xs">
-          <div>
-            <div class="font-bold text-brand-cyan text-sm">${log.name}</div>
-            <div class="text-zinc-400 text-[11px] mt-0.5">${log.date} · ${log.duration} 分鐘 · 消耗 ${log.calories} 大卡</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="openEditLogModal('${log.id}')" class="px-2 py-1 bg-zinc-800 text-zinc-300 rounded hover:text-white">✏️ 編輯</button>
-            <button onclick="deleteLog('${log.id}')" class="px-2 py-1 bg-zinc-800 text-zinc-500 hover:text-red-400 rounded">🗑️</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-
-    // 5. 編輯與刪除紀錄 Modal
-    function openEditLogModal(logId) {
-      const log = state.logs.find(l => l.id === logId);
-      if (!log) return;
-
-      state.editingLogId = logId;
-      const title = document.getElementById('editModalTitle');
-      const content = document.getElementById('editLogContent');
-
-      title.innerText = `✏️ 編輯「${log.name}」(${log.date})`;
-
-      if (log.type === 'strength') {
-        const sets = log.setList || [{ weight: log.weight || 0, reps: log.reps || 0 }];
-        content.innerHTML = `
-          <div class="space-y-3 text-xs">
-            <label class="text-zinc-400 font-medium block">逐組重量與次數修改</label>
-            <div id="editModalSetList" class="space-y-2">
-              ${sets.map((s, idx) => `
-                <div class="flex items-center justify-between bg-dark-input p-2 rounded-xl border border-zinc-800">
-                  <span class="text-zinc-400 w-12 font-mono">第 ${idx+1} 組</span>
-                  <div class="flex items-center gap-1">
-                    <input type="number" step="0.5" value="${s.weight}" class="edit-set-w w-14 bg-zinc-800 text-center text-white rounded py-1 border border-zinc-700">
-                    <span class="text-zinc-500 text-[10px]">kg</span>
-                    <input type="number" step="1" value="${s.reps}" class="edit-set-r w-12 bg-zinc-800 text-center text-white rounded py-1 border border-zinc-700">
-                    <span class="text-zinc-500 text-[10px]">下</span>
-                  </div>
-                  <button onclick="this.parentElement.remove()" class="text-zinc-500 hover:text-red-400 px-1">✕</button>
+    <!-- Top Sticky Header -->
+    <header class="sticky top-0 z-30 bg-[#0b0f14]/90 backdrop-blur-md border-b border-cardBorder sticky-top-safe">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+            <!-- App Logo & Title -->
+            <div class="flex items-center gap-2 cursor-pointer" onclick="switchTab('strength')">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-emerald-900/30">
+                    ⚡
                 </div>
-              `).join('')}
+                <div>
+                    <h1 class="text-base font-bold text-white tracking-wide leading-tight">健身數據筆記</h1>
+                    <p class="text-[10px] text-gray-400">Personal Workout Log</p>
+                </div>
             </div>
-            <button onclick="addEditModalSetRow()" class="w-full py-1.5 bg-zinc-800 text-brand-accent rounded-xl text-xs">+ 增加一組</button>
 
-            <div class="pt-2 border-t border-zinc-800">
-              <label class="text-zinc-400 block mb-1">消耗熱量 (大卡)</label>
-              <input type="number" id="editModalCal" value="${log.calories || 0}" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-            </div>
-          </div>
-        `;
-      } else {
-        content.innerHTML = `
-          <div class="space-y-3 text-xs">
-            <div>
-              <label class="text-zinc-400 block mb-1">運動時間 (分鐘)</label>
-              <input type="number" id="editModalDuration" value="${log.duration || 60}" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-            </div>
-            <div>
-              <label class="text-zinc-400 block mb-1">消耗熱量 (大卡)</label>
-              <input type="number" id="editModalCal" value="${log.calories || 0}" class="w-full bg-dark-input border border-dark-border rounded-xl px-3 py-2 text-white">
-            </div>
-          </div>
-        `;
-      }
+            <!-- Sync Pill & Manual Trigger Button -->
+            <div class="flex items-center gap-1.5">
+                <!-- Direct Manual Sync Trigger Button -->
+                <button onclick="manualSyncTrigger()" id="manualSyncBtn" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/60 text-xs font-semibold flex items-center gap-1 transition btn-active">
+                    <span id="syncIcon" class="inline-block transition-transform duration-500">🔄</span>
+                    <span class="hidden sm:inline">立即</span>同步
+                </button>
 
-      openModal('editLogModal');
-    }
+                <!-- Dynamic Status Pill -->
+                <div id="statusPill" onclick="openModal('cloudModal')" class="px-2.5 py-1.5 rounded-lg bg-gray-800/90 border border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1.5 cursor-pointer hover:border-gray-500 transition">
+                    <span id="statusDot" class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                    <span id="statusText" class="text-[11px] truncate max-w-[100px] sm:max-w-none">同步中...</span>
+                </div>
 
-    function addEditModalSetRow() {
-      const container = document.getElementById('editModalSetList');
-      const count = container.children.length + 1;
-      const div = document.createElement('div');
-      div.className = 'flex items-center justify-between bg-dark-input p-2 rounded-xl border border-zinc-800';
-      div.innerHTML = `
-        <span class="text-zinc-400 w-12 font-mono">第 ${count} 組</span>
-        <div class="flex items-center gap-1">
-          <input type="number" step="0.5" value="60" class="edit-set-w w-14 bg-zinc-800 text-center text-white rounded py-1 border border-zinc-700">
-          <span class="text-zinc-500 text-[10px]">kg</span>
-          <input type="number" step="1" value="10" class="edit-set-r w-12 bg-zinc-800 text-center text-white rounded py-1 border border-zinc-700">
-          <span class="text-zinc-500 text-[10px]">下</span>
+                <!-- Management Modals Navigation Trigger -->
+                <div class="flex items-center gap-1 ml-1">
+                    <button onclick="openModal('cloudModal')" title="雲端設定" class="p-2 rounded-lg bg-cardBg border border-cardBorder text-gray-300 hover:text-white hover:border-emerald-500 transition btn-active text-sm">☁️</button>
+                    <button onclick="openModal('equipModal')" title="器材庫管理" class="p-2 rounded-lg bg-cardBg border border-cardBorder text-gray-300 hover:text-white hover:border-emerald-500 transition btn-active text-sm">⚙️</button>
+                    <button onclick="openModal('profileModal')" title="身體參數" class="p-2 rounded-lg bg-cardBg border border-cardBorder text-gray-300 hover:text-white hover:border-emerald-500 transition btn-active text-sm">👤</button>
+                    <button onclick="openModal('backupModal')" title="備份還原" class="p-2 rounded-lg bg-cardBg border border-cardBorder text-gray-300 hover:text-white hover:border-emerald-500 transition btn-active text-sm">💾</button>
+                </div>
+            </div>
         </div>
-        <button onclick="this.parentElement.remove()" class="text-zinc-500 hover:text-red-400 px-1">✕</button>
-      `;
-      container.appendChild(div);
-    }
+    </header>
 
-    function saveLogEdit() {
-      const log = state.logs.find(l => l.id === state.editingLogId);
-      if (!log) return;
+    <!-- Main Container -->
+    <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-4">
 
-      if (log.type === 'strength') {
-        const wInputs = document.querySelectorAll('.edit-set-w');
-        const rInputs = document.querySelectorAll('.edit-set-r');
-        const newSets = [];
-
-        wInputs.forEach((input, i) => {
-          const w = parseFloat(input.value) || 0;
-          const r = parseInt(rInputs[i].value) || 1;
-          newSets.push({ weight: w, reps: r });
-        });
-
-        if (newSets.length === 0) {
-          showToast('至少需要保留一組紀錄', '❌');
-          return;
-        }
-
-        log.setList = newSets;
-        log.totalSets = newSets.length;
-        log.totalReps = newSets.reduce((sum, s) => sum + s.reps, 0);
-        log.totalVolume = newSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-        log.maxWeight = Math.max(...newSets.map(s => s.weight));
-        log.calories = parseFloat(document.getElementById('editModalCal').value) || log.calories;
-      } else {
-        log.duration = parseInt(document.getElementById('editModalDuration').value) || log.duration;
-        log.calories = parseFloat(document.getElementById('editModalCal').value) || log.calories;
-      }
-
-      log.timestamp = Date.now();
-
-      saveLocalState();
-      pushDataToCloud();
-      closeModal('editLogModal');
-      renderAll();
-      showToast('紀錄修改成功！');
-    }
-
-    function deleteLog(logId) {
-      if (confirm('確定要刪除這筆訓練紀錄嗎？')) {
-        state.logs = state.logs.filter(l => l.id !== logId);
-        state.deletedIds[logId] = Date.now();
-        saveLocalState();
-        pushDataToCloud();
-        renderAll();
-        showToast('已刪除紀錄');
-      }
-    }
-
-
-    // 6. 統計數據與 AI 推薦 logic
-    function updateStatDashboard() {
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      let weekCal = 0;
-      let weekDays = new Set();
-      let totalVol = 0;
-      const muscleCounts = {};
-      MUSCLE_GROUPS.forEach(g => muscleCounts[g] = 0);
-
-      const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
-
-      state.logs.forEach(log => {
-        if (log.timestamp >= startOfWeek.getTime()) {
-          weekCal += (log.calories || 0);
-          weekDays.add(log.date);
-        }
-        if (log.type === 'strength') {
-          totalVol += (log.totalVolume || 0);
-          if (log.timestamp >= fourteenDaysAgo && MUSCLE_GROUPS.includes(log.category)) {
-            muscleCounts[log.category] += 1;
-          }
-        }
-      });
-
-      document.getElementById('statWeekCalories').innerText = weekCal.toLocaleString();
-      document.getElementById('statWeekDays').innerText = weekDays.size;
-      document.getElementById('statTotalVolume').innerText = totalVol.toLocaleString();
-
-      // 近 14 天六大肌群平衡度柱狀圖
-      const maxCount = Math.max(1, ...Object.values(muscleCounts));
-      const barsContainer = document.getElementById('muscleBalanceBars');
-      barsContainer.innerHTML = MUSCLE_GROUPS.map(cat => {
-        const count = muscleCounts[cat];
-        const pct = Math.round((count / maxCount) * 100);
-        return `
-          <div class="flex flex-col items-center gap-1">
-            <div class="w-full bg-zinc-800 rounded-lg h-16 flex items-end p-0.5">
-              <div class="w-full bg-brand-500 rounded-md transition-all duration-500" style="height: ${Math.max(8, pct)}%"></div>
+        <!-- ================= TAB 1: STRENGTH WORKOUT (重訓紀錄) ================= -->
+        <section id="tab-strength" class="space-block space-y-5">
+            
+            <!-- Date Selector Banner -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span class="text-emerald-400 text-base">📅</span>
+                    <span class="text-xs font-semibold text-gray-400">紀錄日期</span>
+                </div>
+                <input type="date" id="strengthDate" class="bg-gray-900 border border-cardBorder text-emerald-400 font-bold text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-emerald-500">
             </div>
-            <span class="text-[9px] text-zinc-400 shrink-0 font-medium">${cat}</span>
-          </div>
-        `;
-      }).join('');
-    }
 
-    function renderAiRecommendCard() {
-      const title = document.getElementById('aiRecommendTitle');
-      const desc = document.getElementById('aiRecommendDesc');
-      const container = document.getElementById('aiRecBadges');
+            <!-- Step 1: Muscle Group Chips -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">1. 選擇肌群部位</h2>
+                    <span id="selectedMuscleBadge" class="text-xs text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/40">胸部</span>
+                </div>
+                <div class="flex flex-wrap gap-2" id="muscleChips">
+                    <!-- Muscle chips populated dynamically -->
+                </div>
+            </div>
 
-      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      const muscleLastTrained = {};
-      MUSCLE_GROUPS.forEach(g => muscleLastTrained[g] = 0);
+            <!-- Step 2: Exercise Chips & Search / Custom Input -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-3">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">2. 選擇或輸入訓練器材/動作</h2>
+                
+                <!-- Quick Exercise Select Chips -->
+                <div class="flex flex-wrap gap-2" id="exerciseChips">
+                    <!-- Exercise chips populated dynamically based on selected muscle -->
+                </div>
 
-      state.logs.forEach(log => {
-        if (log.type === 'strength' && log.timestamp >= sevenDaysAgo && MUSCLE_GROUPS.includes(log.category)) {
-          muscleLastTrained[log.category] += 1;
-        }
-      });
+                <!-- Custom Input -->
+                <div class="relative pt-1">
+                    <input type="text" id="customExerciseInput" placeholder="搜尋或自訂動作名稱 (如: 斜板啞鈴臥推)" 
+                           class="w-full bg-gray-900 border border-cardBorder rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition">
+                </div>
+            </div>
 
-      // 挑選最少訓練的肌群
-      let targetMuscle = MUSCLE_GROUPS[0];
-      let minCount = Infinity;
-      MUSCLE_GROUPS.forEach(g => {
-        if (muscleLastTrained[g] < minCount) {
-          minCount = muscleLastTrained[g];
-          targetMuscle = g;
-        }
-      });
+            <!-- Step 3: Weight & Reps Stepper Controls -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider">3. 設定重量與次數</h2>
+                    <div class="flex items-center gap-1">
+                        <span class="text-[11px] text-gray-400">一次加：</span>
+                        <button onclick="setBatchSets(1)" class="batch-btn px-2 py-0.5 text-xs rounded border border-cardBorder text-gray-300 font-medium">1組</button>
+                        <button onclick="setBatchSets(2)" class="batch-btn px-2 py-0.5 text-xs rounded border border-cardBorder text-gray-300 font-medium">2組</button>
+                        <button onclick="setBatchSets(3)" class="batch-btn px-2 py-0.5 text-xs rounded border border-cardBorder text-gray-300 font-medium">3組</button>
+                        <button onclick="setBatchSets(4)" class="batch-btn px-2 py-0.5 text-xs rounded border border-cardBorder text-gray-300 font-medium">4組</button>
+                    </div>
+                </div>
 
-      title.innerText = `建議今日鍛鍊：${targetMuscle}`;
-      desc.innerText = `近 7 天「${targetMuscle}」訓練頻率較低，建議進行適度強化的鍛鍊`;
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Weight Control Card -->
+                    <div class="bg-gray-900/80 rounded-xl p-3 border border-cardBorder space-y-2 text-center">
+                        <div class="flex items-center justify-between text-xs text-gray-400 font-medium px-1">
+                            <span>重量 (kg)</span>
+                            <span class="text-[10px] text-gray-500">支援 0.5 kg</span>
+                        </div>
+                        <input type="number" id="inputWeight" step="0.5" value="60" 
+                               class="w-full bg-transparent text-center font-black text-3xl text-emerald-400 focus:outline-none">
+                        
+                        <!-- Quick Weight Adjust Buttons -->
+                        <div class="grid grid-cols-4 gap-1 pt-1">
+                            <button onclick="adjustWeight(-5)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg btn-active">-5</button>
+                            <button onclick="adjustWeight(-2.5)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg btn-active">-2.5</button>
+                            <button onclick="adjustWeight(2.5)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-xs font-bold rounded-lg btn-active">+2.5</button>
+                            <button onclick="adjustWeight(5)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-xs font-bold rounded-lg btn-active">+5</button>
+                        </div>
+                    </div>
 
-      const recEquipments = getEquipmentListByCategory(targetMuscle).slice(0, 3);
-      container.innerHTML = recEquipments.map(e => `
-        <span class="text-xs px-2.5 py-1 rounded-lg bg-dark-card border border-brand-500/30 text-brand-accent font-medium">${e}</span>
-      `).join('');
+                    <!-- Reps Control Card -->
+                    <div class="bg-gray-900/80 rounded-xl p-3 border border-cardBorder space-y-2 text-center">
+                        <div class="flex items-center justify-between text-xs text-gray-400 font-medium px-1">
+                            <span>次數 (下)</span>
+                            <span class="text-[10px] text-gray-500">每組下數</span>
+                        </div>
+                        <input type="number" id="inputReps" value="10" 
+                               class="w-full bg-transparent text-center font-black text-3xl text-teal-400 focus:outline-none">
+                        
+                        <!-- Quick Reps Adjust Buttons -->
+                        <div class="grid grid-cols-4 gap-1 pt-1">
+                            <button onclick="adjustReps(-2)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg btn-active">-2</button>
+                            <button onclick="adjustReps(-1)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg btn-active">-1</button>
+                            <button onclick="adjustReps(1)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-teal-400 text-xs font-bold rounded-lg btn-active">+1</button>
+                            <button onclick="adjustReps(2)" class="py-1.5 bg-gray-800 hover:bg-gray-700 text-teal-400 text-xs font-bold rounded-lg btn-active">+2</button>
+                        </div>
+                    </div>
+                </div>
 
-      state.aiRecCategory = targetMuscle;
-      state.aiRecEquipments = recEquipments;
-    }
+                <!-- Add to Pending Queue Button -->
+                <button onclick="addSetsToPendingQueue()" 
+                        class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition btn-active">
+                    <span>➕ 加入今日待存清單</span>
+                    <span id="batchCountBadge" class="text-xs bg-emerald-900/80 px-2 py-0.5 rounded-full border border-emerald-400/30">1組</span>
+                </button>
+            </div>
 
-    function applyAiRecommendation() {
-      if (state.aiRecCategory) {
-        selectCategory(state.aiRecCategory);
-        if (state.aiRecEquipments && state.aiRecEquipments.length > 0) {
-          selectEquipment(state.aiRecEquipments[0]);
-        }
-        showToast(`已切換至建議肌群「${state.aiRecCategory}」`);
-      }
-    }
+            <!-- Step 4: Today's Pending Queue (Grouped by Exercise) -->
+            <div id="pendingQueueSection" class="bg-cardBg border border-emerald-900/50 rounded-2xl p-4 space-y-4">
+                <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        <h2 class="text-sm font-bold text-white">今日待存清單 (動作彙整)</h2>
+                    </div>
+                    <span id="pendingTotalSets" class="text-xs font-semibold text-emerald-400 bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-800/40">0 個動作</span>
+                </div>
+
+                <!-- List of exercise cards in pending queue -->
+                <div id="pendingQueueList" class="space-y-3">
+                    <!-- Cards rendered dynamically -->
+                </div>
+
+                <!-- Calories Input & Final Save Button -->
+                <div class="pt-2 border-t border-cardBorder space-y-3">
+                    <div class="flex items-center justify-between gap-3 bg-gray-900/80 p-3 rounded-xl border border-cardBorder">
+                        <label class="text-xs text-gray-300 font-medium whitespace-nowrap">實際消耗大卡 (選填):</label>
+                        <input type="number" id="pendingCalories" placeholder="未填則依容量估算" class="w-full bg-gray-800 border border-cardBorder rounded-lg px-3 py-1.5 text-xs text-right text-emerald-400 font-bold focus:outline-none focus:border-emerald-500">
+                    </div>
+
+                    <button onclick="savePendingQueueToCloud()" 
+                            class="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-base rounded-xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2 transition btn-active">
+                        <span>✅ 儲存今日訓練並同步雲端</span>
+                    </button>
+                </div>
+            </div>
+
+        </section>
 
 
-    // 7. 全裝置 Firebase 雙向即時同步核心 (Pull-First Smart Merge)
-    async function initFirebaseSync() {
-      updateSyncStatusUI('syncing', '正在連線 Firebase...');
-      await pullAndMergeCloudData();
+        <!-- ================= TAB 2: OTHER SPORTS (其他運動) ================= -->
+        <section id="tab-sports" class="space-block hidden space-y-5">
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-4">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <span>🏐</span> 紀錄其他有氧或球類運動
+                </h2>
 
-      // 每 15 秒輕量背景輪詢
-      setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          pullAndMergeCloudData(true);
-        }
-      }, 15000);
+                <!-- Date -->
+                <div class="flex items-center justify-between bg-gray-900/80 p-3 rounded-xl border border-cardBorder">
+                    <span class="text-xs font-semibold text-gray-400">運動日期</span>
+                    <input type="date" id="sportDate" class="bg-gray-800 border border-cardBorder text-emerald-400 font-bold text-xs rounded-lg px-3 py-1 focus:outline-none">
+                </div>
 
-      // 切換頁面或網路恢復時自動同步
-      window.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') pullAndMergeCloudData(true);
-      });
-      window.addEventListener('online', () => pullAndMergeCloudData());
-    }
+                <!-- Sports Selection Chips -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-gray-400 uppercase">運動項目</label>
+                    <div class="flex flex-wrap gap-2" id="sportsChips">
+                        <!-- Chips inserted via JS -->
+                    </div>
+                    <input type="text" id="customSportInput" placeholder="或輸入自訂項目 (例如: 攀岩, 瑜伽)" class="w-full bg-gray-900 border border-cardBorder rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
 
-    function getFirebaseUrl() {
-      const url = state.dbUrl.replace(/\/+$/, '');
-      return `${url}/fitness_tracker/${state.syncKey}.json`;
-    }
+                <!-- Duration Pills & Custom Input -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-gray-400 uppercase">運動時長 (分鐘)</label>
+                        <span id="sportDurationVal" class="text-sm font-bold text-teal-400">60 分鐘</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="setSportDuration(30)" class="duration-chip px-3 py-1.5 rounded-lg bg-gray-900 border border-cardBorder text-xs text-gray-300 font-medium">30 分鐘</button>
+                        <button onclick="setSportDuration(45)" class="duration-chip px-3 py-1.5 rounded-lg bg-gray-900 border border-cardBorder text-xs text-gray-300 font-medium">45 分鐘</button>
+                        <button onclick="setSportDuration(60)" class="duration-chip px-3 py-1.5 rounded-lg bg-gray-900 border border-cardBorder text-xs text-gray-300 font-medium">60 分鐘</button>
+                        <button onclick="setSportDuration(90)" class="duration-chip px-3 py-1.5 rounded-lg bg-gray-900 border border-cardBorder text-xs text-gray-300 font-medium">90 分鐘</button>
+                        <button onclick="setSportDuration(120)" class="duration-chip px-3 py-1.5 rounded-lg bg-gray-900 border border-cardBorder text-xs text-gray-300 font-medium">120 分鐘</button>
+                    </div>
+                    <input type="number" id="inputSportDuration" value="60" oninput="document.getElementById('sportDurationVal').innerText = (this.value||0) + ' 分鐘'" class="w-full bg-gray-900 border border-cardBorder rounded-xl px-3.5 py-2 text-sm text-center text-teal-400 font-bold focus:outline-none">
+                </div>
 
-    async function pullAndMergeCloudData(isBackground = false) {
-      if (!isBackground) updateSyncStatusUI('syncing', '同步中...');
+                <!-- Calories Input (Optional) -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-gray-400 uppercase">實際消耗大卡 (選填)</label>
+                    <input type="number" id="inputSportCalories" placeholder="留空則依項目MET與體重自動估算" class="w-full bg-gray-900 border border-cardBorder rounded-xl px-3.5 py-2.5 text-sm text-emerald-400 font-bold focus:outline-none focus:border-emerald-500">
+                </div>
 
-      try {
-        const res = await fetch(getFirebaseUrl());
-        
-        if (res.status === 401) {
-          updateSyncStatusUI('error', '🔴 401 權限不足：請檢查 Firebase 安全規則');
-          return;
-        }
-        if (!res.ok) {
-          updateSyncStatusUI('error', `🔴 連線失敗 (${res.status})`);
-          return;
-        }
+                <!-- Submit Button -->
+                <button onclick="saveOtherSportToCloud()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition btn-active">
+                    <span>✅ 儲存運動紀錄並同步</span>
+                </button>
+            </div>
+        </section>
 
-        const cloudData = await res.json();
 
-        if (cloudData) {
-          // Smart Pull-First Merge 雙向合併
-          const mergedDeleted = { ...state.deletedIds, ...(cloudData.deletedIds || {}) };
-          state.deletedIds = mergedDeleted;
+        <!-- ================= TAB 3: DATA HISTORY (📊 數據歷史) ================= -->
+        <section id="tab-history" class="space-block hidden space-y-4">
+            
+            <!-- View Mode Switcher -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-2 flex items-center gap-1">
+                <button id="viewModeExerciseBtn" onclick="switchHistoryViewMode('exercise')" 
+                        class="flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow-md">
+                    <span>📋 依動作彙整 (PR與總組數)</span>
+                </button>
+                <button id="viewModeDateBtn" onclick="switchHistoryViewMode('date')" 
+                        class="flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-gray-400 hover:text-white">
+                    <span>📅 依日期檢視</span>
+                </button>
+            </div>
 
-          // 合併 Logs (以最高 timestamp 為準且排除被刪除的 ID)
-          const cloudLogs = Array.isArray(cloudData.logs) ? cloudData.logs : (cloudData.logs ? Object.values(cloudData.logs) : []);
-          const logMap = {};
+            <!-- Muscle Filter Bar (Visible in Exercise Mode) -->
+            <div id="historyMuscleFilterBar" class="overflow-x-auto pb-1 flex gap-1.5 no-scrollbar">
+                <!-- Chips inserted via JS -->
+            </div>
 
-          state.logs.forEach(l => {
-            if (!mergedDeleted[l.id]) logMap[l.id] = l;
-          });
+            <!-- History Summary Stats Badge -->
+            <div class="bg-gradient-to-r from-gray-900 via-cardBg to-gray-900 border border-cardBorder rounded-2xl p-3.5 flex items-center justify-around text-center">
+                <div>
+                    <p class="text-[10px] text-gray-400">總紀錄筆數</p>
+                    <p id="statTotalCount" class="text-base font-black text-emerald-400">0</p>
+                </div>
+                <div class="w-px h-6 bg-cardBorder"></div>
+                <div>
+                    <p class="text-[10px] text-gray-400">最高單日訓練量</p>
+                    <p id="statMaxVolume" class="text-base font-black text-teal-400">0 kg</p>
+                </div>
+                <div class="w-px h-6 bg-cardBorder"></div>
+                <div>
+                    <p class="text-[10px] text-gray-400">估計總消耗大卡</p>
+                    <p id="statTotalCals" class="text-base font-black text-emerald-400">0 kcal</p>
+                </div>
+            </div>
 
-          cloudLogs.forEach(cl => {
-            if (cl && cl.id && !mergedDeleted[cl.id]) {
-              if (!logMap[cl.id] || (cl.timestamp || 0) > (logMap[cl.id].timestamp || 0)) {
-                logMap[cl.id] = cl;
-              }
-            }
-          });
+            <!-- History List Container -->
+            <div id="historyList" class="space-y-4">
+                <!-- Dynamic cards rendered here -->
+            </div>
+        </section>
 
-          state.logs = Object.values(logMap).sort((a, b) => b.timestamp - a.timestamp);
+    </main>
 
-          // 合併 PendingList
-          if (cloudData.pendingList && Array.isArray(cloudData.pendingList)) {
-            if (state.pendingList.length === 0) {
-              state.pendingList = cloudData.pendingList;
-            }
-          }
+    <!-- Bottom Fixed Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 z-30 bg-[#0b0f14]/95 backdrop-blur-lg border-t border-cardBorder safe-pb">
+        <div class="max-w-3xl mx-auto px-6 py-2 flex items-center justify-around">
+            <button onclick="switchTab('strength')" id="nav-strength" class="flex flex-col items-center gap-1 py-1 text-emerald-400 transition btn-active">
+                <span class="text-xl">🏋️</span>
+                <span class="text-[11px] font-bold">重訓紀錄</span>
+            </button>
+            <button onclick="switchTab('sports')" id="nav-sports" class="flex flex-col items-center gap-1 py-1 text-gray-500 hover:text-gray-300 transition btn-active">
+                <span class="text-xl">🏐</span>
+                <span class="text-[11px] font-bold">其他運動</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history" class="flex flex-col items-center gap-1 py-1 text-gray-500 hover:text-gray-300 transition btn-active">
+                <span class="text-xl">📊</span>
+                <span class="text-[11px] font-bold">數據歷史</span>
+            </button>
+        </div>
+    </nav>
 
-          // 合併 Profile & CustomEquipment
-          if (cloudData.profile) state.profile = { ...state.profile, ...cloudData.profile };
-          if (cloudData.customEquipment) {
-            const mergedEquip = [...state.customEquipment];
-            cloudData.customEquipment.forEach(ce => {
-              if (!mergedEquip.some(e => e.name === ce.name)) mergedEquip.push(ce);
-            });
-            state.customEquipment = mergedEquip;
-          }
 
-          saveLocalState();
-          renderAll();
-        } else {
-          // 若雲端無資料，推送本機資料建置初始節點
-          await pushDataToCloud();
-        }
+    <!-- ================= MODALS ================= -->
 
-        const nowStr = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-        state.lastSyncTime = nowStr;
-        updateSyncStatusUI('success', `🟢 已同步 ${nowStr}`);
+    <!-- Modal 1: Cloud Sync Settings Modal -->
+    <div id="cloudModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-cardBorder w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <span>☁️</span> Firebase 雲端即時同步設定
+                </h3>
+                <button onclick="closeModal('cloudModal')" class="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
 
-      } catch (err) {
-        console.error('Firebase Sync Error:', err);
-        updateSyncStatusUI('error', '🔴 網路離線 (使用本機快取)');
-      }
-    }
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-gray-400 font-semibold block mb-1">Firebase Realtime Database 網址</label>
+                    <input type="text" id="modalDbUrl" class="w-full bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-emerald-400 font-mono text-xs focus:outline-none focus:border-emerald-500">
+                    <p class="text-[10px] text-gray-500 mt-1">系統會自動清除結尾多餘斜線 `/` 避免 HTTP 400 錯誤。</p>
+                </div>
 
-    async function pushDataToCloud() {
-      updateSyncStatusUI('syncing', '推送雲端中...');
-      try {
-        // Firebase RTDB 將 logs 轉為 Map 格式
-        const logsMap = {};
-        state.logs.forEach(l => {
-          if (l && l.id) logsMap[l.id] = l;
-        });
+                <div>
+                    <label class="text-gray-400 font-semibold block mb-1">個人專屬同步密鑰 (Sync Key)</label>
+                    <input type="text" id="modalSyncKey" class="w-full bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none focus:border-emerald-500">
+                    <p class="text-[10px] text-gray-500 mt-1">預設密鑰：<code class="text-emerald-400">Kenchi1116</code>。輸入相同密鑰即可多裝置跨端同步。</p>
+                </div>
 
-        const payload = {
-          profile: state.profile,
-          logs: logsMap,
-          pendingList: state.pendingList,
-          deletedIds: state.deletedIds,
-          customEquipment: state.customEquipment,
-          updatedAt: Date.now()
+                <!-- Diagnostic Box -->
+                <div class="bg-gray-900 p-3 rounded-xl border border-cardBorder space-y-1">
+                    <div class="flex items-center justify-between text-gray-300">
+                        <span>當前連線狀態：</span>
+                        <span id="modalStatusText" class="font-bold text-yellow-400">檢查中...</span>
+                    </div>
+                    <div class="flex items-center justify-between text-gray-400 text-[11px]">
+                        <span>上次同步時間：</span>
+                        <span id="modalLastSyncTime">無記錄</span>
+                    </div>
+                    <div id="modalDiagnostics" class="text-[10px] text-red-400 pt-1 font-mono break-all hidden"></div>
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-1">
+                <button onclick="saveCloudSettingsModal()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 btn-active">
+                    <span>💾 儲存並啟動即時同步</span>
+                </button>
+                <button onclick="resetToDefaultCloudSettings()" class="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs rounded-xl border border-cardBorder flex items-center justify-center gap-2 btn-active">
+                    <span>🔄 重設為 Kenchi1116 預設連線</span>
+                </button>
+                <button onclick="copyShareableSyncUrl()" class="w-full py-2 bg-gray-900 hover:bg-gray-800 text-teal-400 text-[11px] font-medium rounded-lg flex items-center justify-center gap-1">
+                    <span>🔗 複製「免輸入密鑰」快速同步網址</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Custom Exercises Manager -->
+    <div id="equipModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-cardBorder w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <span>⚙️</span> 自訂訓練器材庫
+                </h3>
+                <button onclick="closeModal('equipModal')" class="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="newEquipMuscle" class="bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-white focus:outline-none">
+                        <option value="胸部">胸部</option>
+                        <option value="背部">背部</option>
+                        <option value="腿部">腿部</option>
+                        <option value="肩部">肩部</option>
+                        <option value="手臂">手臂</option>
+                        <option value="核心">核心</option>
+                    </select>
+                    <input type="text" id="newEquipName" placeholder="器材/動作名稱" class="bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-white focus:outline-none">
+                </div>
+                <button onclick="addNewCustomExercise()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl btn-active">
+                    ➕ 新增至器材庫
+                </button>
+
+                <div class="border-t border-cardBorder pt-2">
+                    <h4 class="text-gray-400 font-bold mb-2">已儲存自訂動作列表：</h4>
+                    <div id="customExercisesList" class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                        <!-- Items rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Body Profile Modal -->
+    <div id="profileModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-cardBorder w-full max-w-sm rounded-2xl p-5 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <span>👤</span> 身體參數 (計算熱量用)
+                </h3>
+                <button onclick="closeModal('profileModal')" class="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-gray-400 font-semibold block mb-1">身高 (cm)</label>
+                    <input type="number" id="userHeight" value="186" class="w-full bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-white focus:outline-none font-bold">
+                </div>
+                <div>
+                    <label class="text-gray-400 font-semibold block mb-1">體重 (kg)</label>
+                    <input type="number" id="userWeight" value="85" class="w-full bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-emerald-400 font-bold focus:outline-none">
+                </div>
+                <p class="text-[10px] text-gray-500">此參數將用於無輸入實際熱量時的消耗大卡科學估算算法。</p>
+            </div>
+
+            <button onclick="saveBodyProfile()" class="w-full py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl btn-active">
+                儲存身體參數
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal 4: Backup & Restore Modal -->
+    <div id="backupModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-cardBorder w-full max-w-md rounded-2xl p-5 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <span>💾</span> 資料備份與匯入還原
+                </h3>
+                <button onclick="closeModal('backupModal')" class="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="flex gap-2">
+                    <button onclick="copyJsonBackupToClipboard()" class="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-emerald-400 border border-cardBorder font-bold rounded-xl btn-active">
+                        📋 一鍵複製 JSON 備份
+                    </button>
+                    <button onclick="downloadBackupFile()" class="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-teal-400 border border-cardBorder font-bold rounded-xl btn-active">
+                        📥 下載備份檔案
+                    </button>
+                </div>
+
+                <div class="border-t border-cardBorder pt-3 space-y-2">
+                    <label class="text-gray-400 font-semibold block">貼上 JSON 備份文字進行還原：</label>
+                    <textarea id="importJsonText" rows="4" placeholder="請在此處貼上過去備份的 JSON 文字內容..." class="w-full bg-gray-900 border border-cardBorder rounded-xl p-2.5 text-white font-mono text-[11px] focus:outline-none"></textarea>
+                    <button onclick="importJsonBackupText()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl btn-active">
+                        ✅ 驗證並還原備份資料
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================= JAVASCRIPT APPLICATION LOGIC ================= -->
+    <script>
+        // Default Constants out-of-the-box
+        const DEFAULT_DB_URL = "https://fitness-tracker-54432-default-rtdb.asia-southeast1.firebasedatabase.app";
+        const DEFAULT_SYNC_KEY = "Kenchi1116";
+
+        // Preset Muscle Groups and Exercises
+        const DEFAULT_MUSCLE_EXERCISES = {
+            "胸部": ["槓鈴臥推", "上斜槓鈴臥推", "啞鈴臥推", "上斜啞鈴臥推", "雙槓屈臂伸", "蝴蝶機夾胸", "滑輪飛鳥", "坐姿胸推機", "俯臥撐"],
+            "背部": ["滑輪下拉", "引體向上", "槓鈴划船", "啞鈴划船", "坐姿划船", "直臂下拉", "羅馬椅挺身", "硬舉"],
+            "腿部": ["深蹲", "腿推機", "保加利亞分腿蹲", "腿彎舉", "腿伸展", "羅馬尼亞硬舉", "坐姿提踵"],
+            "肩部": ["肩推機", "啞鈴過頭肩推", "啞鈴側平舉", "滑輪側平舉", "啞鈴前平舉", "反向蝴蝶機"],
+            "手臂": ["二頭肌彎舉", "錘式彎舉", "三頭肌滑輪下拉", "窄距臥推", "仰臥三頭伸展"],
+            "核心": ["棒式", "捲腹", "懸垂提膝", "俄式扭轉", "輪胎滾輪"]
         };
 
-        const res = await fetch(getFirebaseUrl(), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        const OTHER_SPORTS_LIST = [
+            { name: "排球", met: 6.0, icon: "🏐" },
+            { name: "羽球", met: 5.5, icon: "🏸" },
+            { name: "跑步", met: 8.0, icon: "🏃" },
+            { name: "坡度快走", met: 4.5, icon: "🚶" },
+            { name: "飛輪", met: 7.0, icon: "🚴" },
+            { name: "游泳", met: 7.0, icon: "🏊" },
+            { name: "登山", met: 6.5, icon: "⛰️" }
+        ];
 
-        if (res.ok) {
-          const nowStr = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-          state.lastSyncTime = nowStr;
-          updateSyncStatusUI('success', `🟢 已同步 ${nowStr}`);
-        } else {
-          updateSyncStatusUI('error', `🔴 推送失敗 (${res.status})`);
+        // Global State
+        let appState = {
+            dbUrl: DEFAULT_DB_URL,
+            syncKey: DEFAULT_SYNC_KEY,
+            records: [],            // Standard array of workout objects
+            customExercises: {},    // { "胸部": ["自訂1"], ... }
+            bodyProfile: { height: 186, weight: 85 },
+            lastSynced: null,
+            pendingQueue: []        // Array of grouped exercises for today: [{ muscle, exercise, setsList: [{weight, reps}], calories: '' }]
+        };
+
+        // UI State Variables
+        let selectedMuscle = "胸部";
+        let selectedExercise = "槓鈴臥推";
+        let batchSetsCount = 1;
+        let selectedSportName = "排球";
+        let historyViewMode = "exercise"; // 'exercise' or 'date'
+        let historyMuscleFilter = "ALL";
+
+        // ================= INITIALIZATION =================
+        window.onload = function() {
+            // Set default date inputs to Today (Local)
+            const todayStr = getTodayDateString();
+            document.getElementById('strengthDate').value = todayStr;
+            document.getElementById('sportDate').value = todayStr;
+
+            // Check URL Parameters for Quick Sync Key override if any
+            const urlParams = new URLSearchParams(window.location.search);
+            const keyParam = urlParams.get('key');
+            const urlParam = urlParams.get('db');
+
+            // Load saved settings from LocalStorage
+            const storedUrl = localStorage.getItem('fit_dbUrl');
+            const storedKey = localStorage.getItem('fit_syncKey');
+
+            appState.dbUrl = sanitizeDbUrl(urlParam || storedUrl || DEFAULT_DB_URL);
+            appState.syncKey = sanitizeSyncKey(keyParam || storedKey || DEFAULT_SYNC_KEY);
+
+            // Save back sanitized defaults
+            localStorage.setItem('fit_dbUrl', appState.dbUrl);
+            localStorage.setItem('fit_syncKey', appState.syncKey);
+
+            // Load cached records locally first
+            loadLocalCache();
+
+            // Populate initial UI
+            renderMuscleChips();
+            renderExerciseChips();
+            renderPendingQueue();
+            renderSportsChips();
+            renderCustomExercisesList();
+            updateCloudModalInputs();
+
+            // Perform Cloud Pull & Legacy Discovery immediately
+            syncFromCloud(true);
+
+            // Add Visibility Change Listener for Auto-Sync when returning to tab
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    syncFromCloud(false);
+                }
+            });
+        };
+
+        function getTodayDateString() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
-      } catch (err) {
-        updateSyncStatusUI('error', '🔴 無法連線雲端');
-      }
-    }
 
-    function handleManualSync() {
-      pullAndMergeCloudData().then(() => showToast('已手動與雲端同步完成！'));
-    }
-
-    function updateSyncStatusUI(status, msg) {
-      state.syncStatus = status;
-      const dot = document.getElementById('syncStatusDot');
-      const text = document.getElementById('syncStatusText');
-      const diagStatus = document.getElementById('diagSyncStatus');
-      const diagTime = document.getElementById('diagLastSyncTime');
-
-      text.innerText = msg;
-      if (diagStatus) diagStatus.innerText = msg;
-      if (diagTime && state.lastSyncTime) diagTime.innerText = state.lastSyncTime;
-
-      if (status === 'success') {
-        dot.className = 'w-2 h-2 rounded-full bg-brand-accent';
-      } else if (status === 'syncing') {
-        dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
-      } else if (status === 'error') {
-        dot.className = 'w-2 h-2 rounded-full bg-red-500';
-      }
-    }
-
-
-    // 8. 輔助設定 Modal 操作 logic
-    function saveCloudConfig() {
-      const url = document.getElementById('cfgDbUrl').value.trim();
-      const key = document.getElementById('cfgSyncKey').value.trim();
-
-      if (!url || !key) {
-        showToast('請填寫完整的資料庫網址與密鑰', '❌');
-        return;
-      }
-
-      state.dbUrl = url;
-      state.syncKey = key;
-      localStorage.setItem('ft_db_url', url);
-      localStorage.setItem('ft_sync_key', key);
-
-      closeModal('cloudModal');
-      initFirebaseSync();
-      showToast('雲端同步設定已儲存並重新連線');
-    }
-
-    function resetDefaultCloudConfig() {
-      state.dbUrl = DEFAULT_DB_URL;
-      state.syncKey = DEFAULT_SYNC_KEY;
-      document.getElementById('cfgDbUrl').value = DEFAULT_DB_URL;
-      document.getElementById('cfgSyncKey').value = DEFAULT_SYNC_KEY;
-      localStorage.setItem('ft_db_url', DEFAULT_DB_URL);
-      localStorage.setItem('ft_sync_key', DEFAULT_SYNC_KEY);
-      initFirebaseSync();
-      showToast('已重設為預設密鑰 (jianzhi_fit_2026)');
-    }
-
-    function copyQuickSyncUrl() {
-      const baseUrl = window.location.origin + window.location.pathname;
-      const fullUrl = `${baseUrl}?key=${state.syncKey}`;
-      
-      const tempInput = document.createElement('input');
-      tempInput.value = fullUrl;
-      document.body.appendChild(tempInput);
-      tempInput.select();
-      document.execCommand('copy');
-      document.body.removeChild(tempInput);
-
-      showToast('已複製免密鑰同步網址！');
-    }
-
-    function saveProfileConfig() {
-      const w = parseFloat(document.getElementById('profWeight').value) || 85;
-      const h = parseFloat(document.getElementById('profHeight').value) || 186;
-      const a = parseInt(document.getElementById('profAge').value) || 43;
-
-      state.profile = { weight: w, height: h, age: a };
-      saveLocalState();
-      pushDataToCloud();
-      closeModal('profileModal');
-      renderAll();
-      showToast('身體參數更新成功！');
-    }
-
-    function addNewCustomEquipment() {
-      const name = document.getElementById('newEquipInput').value.trim();
-      if (!name) return;
-
-      if (!state.customEquipment.some(e => e.name === name)) {
-        state.customEquipment.push({ name, category: state.selectedCategory });
-        saveLocalState();
-        pushDataToCloud();
-        renderCustomEquipmentListModal();
-        renderCategoryCapsules();
-        renderEquipmentBadges();
-        document.getElementById('newEquipInput').value = '';
-        showToast(`已新增自訂器材「${name}」`);
-      }
-    }
-
-    function deleteCustomEquipment(name) {
-      state.customEquipment = state.customEquipment.filter(e => e.name !== name);
-      saveLocalState();
-      pushDataToCloud();
-      renderCustomEquipmentListModal();
-      renderEquipmentBadges();
-      showToast('已移除自訂器材');
-    }
-
-    function renderCustomEquipmentListModal() {
-      const container = document.getElementById('customEquipmentListModal');
-      if (state.customEquipment.length === 0) {
-        container.innerHTML = `<div class="text-center py-4 text-zinc-500 text-xs">暫無自訂器材</div>`;
-        return;
-      }
-
-      container.innerHTML = state.customEquipment.map(e => `
-        <div class="flex justify-between items-center p-2 rounded-xl bg-dark-input border border-zinc-800 text-xs">
-          <span class="text-zinc-200 font-medium">${e.name} <span class="text-[10px] text-zinc-500">(${e.category})</span></span>
-          <button onclick="deleteCustomEquipment('${e.name}')" class="text-red-400 hover:text-red-300">刪除</button>
-        </div>
-      `).join('');
-    }
-
-    // 匯出 JSON
-    function exportDataJSON() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `fitness_backup_${getTodayDateStr()}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      showToast('備份 JSON 已成功下載');
-    }
-
-    // 匯入 JSON
-    function importDataJSON(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const imported = JSON.parse(e.target.result);
-          if (imported.logs) state.logs = imported.logs;
-          if (imported.profile) state.profile = imported.profile;
-          if (imported.customEquipment) state.customEquipment = imported.customEquipment;
-
-          saveLocalState();
-          pushDataToCloud();
-          closeModal('backupModal');
-          renderAll();
-          showToast('JSON 備份匯入成功！');
-        } catch (err) {
-          showToast('檔案格式錯誤，無法匯入', '❌');
+        // ================= SANITIZATION & URL CLEANING =================
+        function sanitizeDbUrl(rawUrl) {
+            if (!rawUrl) return DEFAULT_DB_URL;
+            let url = rawUrl.trim();
+            // Remove trailing slashes
+            url = url.replace(/\/+$/, '');
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+            return url;
         }
-      };
-      reader.readAsText(file);
-    }
 
-    function clearAllData() {
-      if (confirm('確定要清除手機本地所有資料嗎？此操作無法撤銷！')) {
-        localStorage.clear();
-        state.logs = [];
-        state.pendingList = [];
-        state.customEquipment = [];
-        renderAll();
-        closeModal('backupModal');
-        showToast('本地數據已清空');
-      }
-    }
-
-
-    // 9. 通用工具函式 (Utils)
-    function switchTab(tabId) {
-      state.activeTab = tabId;
-
-      document.getElementById('tab-strength').classList.add('hidden');
-      document.getElementById('tab-cardio').classList.add('hidden');
-      document.getElementById('tab-history').classList.add('hidden');
-
-      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
-
-      ['strength', 'cardio', 'history'].forEach(t => {
-        const btn = document.getElementById(`nav-${t}`);
-        if (t === tabId) {
-          btn.className = 'btn-active flex flex-col items-center justify-center py-1.5 text-brand-accent font-bold';
-        } else {
-          btn.className = 'btn-active flex flex-col items-center justify-center py-1.5 text-zinc-400 hover:text-zinc-200';
+        function sanitizeSyncKey(rawKey) {
+            if (!rawKey) return DEFAULT_SYNC_KEY;
+            let key = rawKey.trim();
+            // Replace unsafe Firebase key characters . # $ [ ] /
+            key = key.replace(/[.#$\[\]\/]/g, '_');
+            return key || DEFAULT_SYNC_KEY;
         }
-      });
-    }
 
-    function updateBadgeCounts() {
-      const pendingBadge = document.getElementById('navPendingBadge');
-      if (state.pendingList.length > 0) {
-        pendingBadge.innerText = state.pendingList.length;
-        pendingBadge.classList.remove('hidden');
-      } else {
-        pendingBadge.classList.add('hidden');
-      }
-    }
+        // ================= BULLETPROOF FIREBASE REALTIME DB SYNC =================
+        async function syncFromCloud(showModalDiagnostics = false) {
+            updateStatus('syncing', '同步中...');
+            
+            const cleanUrl = sanitizeDbUrl(appState.dbUrl);
+            const cleanKey = sanitizeSyncKey(appState.syncKey);
 
-    function openModal(id) {
-      if (id === 'cloudModal') {
-        document.getElementById('cfgDbUrl').value = state.dbUrl;
-        document.getElementById('cfgSyncKey').value = state.syncKey;
-      } else if (id === 'profileModal') {
-        document.getElementById('profWeight').value = state.profile.weight || 85;
-        document.getElementById('profHeight').value = state.profile.height || 186;
-        document.getElementById('profAge').value = state.profile.age || 43;
-      } else if (id === 'equipmentModal') {
-        renderCustomEquipmentListModal();
-      }
-      document.getElementById(id).classList.remove('hidden');
-    }
+            // Target REST endpoint: /fitness_tracker/{syncKey}.json
+            const primaryPath = `${cleanUrl}/fitness_tracker/${cleanKey}.json`;
 
-    function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
-    }
+            try {
+                let response = await fetch(primaryPath, { cache: 'no-cache' });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                }
 
-    function saveLocalState() {
-      localStorage.setItem('ft_logs', JSON.stringify(state.logs));
-      localStorage.setItem('ft_pending', JSON.stringify(state.pendingList));
-      localStorage.setItem('ft_deleted', JSON.stringify(state.deletedIds));
-      localStorage.setItem('ft_profile', JSON.stringify(state.profile));
-      localStorage.setItem('ft_custom_equip', JSON.stringify(state.customEquipment));
-    }
+                let data = await response.json();
+                let cloudRecords = [];
 
-    function getTodayDateStr() {
-      const d = new Date();
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}/${month}/${day}`;
-    }
+                // Multi-Path Legacy Auto-Discovery
+                if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+                    console.log("Primary path empty, checking legacy paths...");
+                    const legacyPaths = [
+                        `${cleanUrl}/users/${cleanKey}.json`,
+                        `${cleanUrl}/data/${cleanKey}.json`,
+                        `${cleanUrl}/${cleanKey}.json`
+                    ];
 
-    function showToast(msg, icon = '✓') {
-      const toast = document.getElementById('toast');
-      document.getElementById('toastMsg').innerText = msg;
-      document.getElementById('toastIcon').innerText = icon;
+                    for (const legacyPath of legacyPaths) {
+                        try {
+                            const legacyRes = await fetch(legacyPath, { cache: 'no-cache' });
+                            if (legacyRes.ok) {
+                                const legacyData = await legacyRes.json();
+                                if (legacyData) {
+                                    console.log("Found legacy data at:", legacyPath);
+                                    data = legacyData;
+                                    break;
+                                }
+                            }
+                        } catch (e) {
+                            // ignore legacy fetch fail and try next
+                        }
+                    }
+                }
 
-      toast.classList.remove('opacity-0', 'pointer-events-none');
-      toast.classList.add('opacity-100');
+                // Standardize and Parse Cloud Records
+                if (data) {
+                    cloudRecords = parseAndStandardizeCloudData(data);
+                    
+                    if (data.customExercises) {
+                        appState.customExercises = { ...appState.customExercises, ...data.customExercises };
+                    }
+                    if (data.bodyProfile) {
+                        appState.bodyProfile = { ...appState.bodyProfile, ...data.bodyProfile };
+                        document.getElementById('userHeight').value = appState.bodyProfile.height || 186;
+                        document.getElementById('userWeight').value = appState.bodyProfile.weight || 85;
+                    }
+                }
 
-      setTimeout(() => {
-        toast.classList.remove('opacity-100');
-        toast.classList.add('opacity-0', 'pointer-events-none');
-      }, 2500);
-    }
-  </script>
+                // Two-way Intelligent Merge
+                mergeRecords(cloudRecords);
+
+                // Save merged to local cache
+                saveLocalCache();
+
+                // Auto push consolidated state to cloud to keep cloud schema updated & clean
+                await pushToCloud();
+
+                const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                appState.lastSynced = nowTime;
+                updateStatus('synced', `已同步 ${nowTime}`);
+                renderHistory();
+
+            } catch (err) {
+                console.error("Firebase Sync Error:", err);
+                const errMsg = err.message || '連線失敗';
+                updateStatus('error', `連線問題 (${errMsg})`);
+                if (showModalDiagnostics) {
+                    const diagEl = document.getElementById('modalDiagnostics');
+                    diagEl.innerText = `連線診斷錯誤: ${errMsg}`;
+                    diagEl.classList.remove('hidden');
+                }
+            }
+        }
+
+        async function pushToCloud() {
+            const cleanUrl = sanitizeDbUrl(appState.dbUrl);
+            const cleanKey = sanitizeSyncKey(appState.syncKey);
+            const targetUrl = `${cleanUrl}/fitness_tracker/${cleanKey}.json`;
+
+            // Clean data payload: remove undefined/NaN before JSON stringify
+            const cleanRecords = JSON.parse(JSON.stringify(appState.records, (key, val) => {
+                if (val === undefined || Number.isNaN(val)) return null;
+                return val;
+            }));
+
+            const payload = {
+                records: cleanRecords,
+                customExercises: appState.customExercises || {},
+                bodyProfile: appState.bodyProfile || { height: 186, weight: 85 },
+                updatedAt: Date.now()
+            };
+
+            const response = await fetch(targetUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`雲端寫入失敗 (HTTP ${response.status})`);
+            }
+        }
+
+        // Parse legacy or flat records into standardized format
+        function parseAndStandardizeCloudData(rawData) {
+            let items = [];
+
+            if (Array.isArray(rawData)) {
+                items = rawData;
+            } else if (rawData.records && Array.isArray(rawData.records)) {
+                items = rawData.records;
+            } else if (typeof rawData === 'object') {
+                // Check if wrapped in objects or maps like { "-Oxyz": {...} }
+                const values = Object.values(rawData);
+                // If it contains 'records' key inside an object map
+                if (rawData.records && typeof rawData.records === 'object') {
+                    items = Object.values(rawData.records);
+                } else {
+                    // Filter object values that look like workout records
+                    items = values.filter(v => typeof v === 'object' && v !== null && (v.date || v.exercise || v.name));
+                }
+            }
+
+            const standardizedMap = new Map();
+
+            items.forEach((item, idx) => {
+                if (!item) return;
+
+                const date = item.date || getTodayDateString();
+                const type = item.type || (item.setsList || item.weight !== undefined ? 'strength' : 'sport');
+                const muscle = item.muscle || item.category || '胸部';
+                const exercise = item.exercise || item.name || item.workoutName || '自訂訓練';
+                const calories = Number(item.calories) || 0;
+                const duration = Number(item.duration) || 0;
+
+                const recordKey = `${date}_${type}_${exercise}`;
+
+                if (type === 'strength') {
+                    let setsList = [];
+
+                    if (Array.isArray(item.setsList) && item.setsList.length > 0) {
+                        setsList = item.setsList.map(s => ({
+                            weight: Number(s.weight) || 0,
+                            reps: Number(s.reps) || 0
+                        }));
+                    } else if (item.weight !== undefined || item.reps !== undefined) {
+                        // Single legacy set format
+                        const weight = Number(item.weight) || 0;
+                        const reps = Number(item.reps) || 0;
+                        const setNum = Number(item.sets) || 1;
+                        for (let s = 0; s < setNum; s++) {
+                            setsList.push({ weight, reps });
+                        }
+                    }
+
+                    if (setsList.length === 0) {
+                        setsList.push({ weight: 0, reps: 0 });
+                    }
+
+                    if (standardizedMap.has(recordKey)) {
+                        // Merge sets into existing record on same date & exercise
+                        const existing = standardizedMap.get(recordKey);
+                        existing.setsList = existing.setsList.concat(setsList);
+                        if (calories > 0) existing.calories = Math.max(existing.calories, calories);
+                    } else {
+                        standardizedMap.set(recordKey, {
+                            id: item.id || `rec_${Date.now()}_${idx}_${Math.random().toString(36).substring(2,6)}`,
+                            type: 'strength',
+                            date: date,
+                            muscle: muscle,
+                            exercise: exercise,
+                            setsList: setsList,
+                            calories: calories
+                        });
+                    }
+                } else {
+                    // Sport item
+                    standardizedMap.set(recordKey + '_' + (item.id || idx), {
+                        id: item.id || `sport_${Date.now()}_${idx}`,
+                        type: 'sport',
+                        date: date,
+                        exercise: exercise,
+                        duration: duration || 60,
+                        calories: calories
+                    });
+                }
+            });
+
+            return Array.from(standardizedMap.values());
+        }
+
+        // Two-way Local/Cloud Merger
+        function mergeRecords(cloudRecords) {
+            const mergedMap = new Map();
+            
+            // First add local records
+            appState.records.forEach(r => {
+                if (r && r.id) mergedMap.set(r.id, r);
+            });
+
+            // Overwrite/Add cloud records
+            cloudRecords.forEach(c => {
+                if (c && c.id) {
+                    mergedMap.set(c.id, c);
+                }
+            });
+
+            appState.records = Array.from(mergedMap.values());
+            // Sort by date descending
+            appState.records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        }
+
+        function updateStatus(state, text) {
+            const dot = document.getElementById('statusDot');
+            const textEl = document.getElementById('statusText');
+            const modalText = document.getElementById('modalStatusText');
+
+            textEl.innerText = text;
+            if (modalText) modalText.innerText = text;
+
+            if (state === 'synced') {
+                dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                if (modalText) modalText.className = "font-bold text-emerald-400";
+            } else if (state === 'syncing') {
+                dot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
+                if (modalText) modalText.className = "font-bold text-yellow-400";
+            } else {
+                dot.className = "w-2 h-2 rounded-full bg-red-500";
+                if (modalText) modalText.className = "font-bold text-red-500";
+            }
+        }
+
+        function manualSyncTrigger() {
+            const icon = document.getElementById('syncIcon');
+            icon.classList.add('rotate-180');
+            setTimeout(() => icon.classList.remove('rotate-180'), 500);
+            syncFromCloud(true);
+        }
+
+        // Local Storage Helpers
+        function saveLocalCache() {
+            localStorage.setItem('fit_records', JSON.stringify(appState.records));
+            localStorage.setItem('fit_custom_ex', JSON.stringify(appState.customExercises));
+            localStorage.setItem('fit_profile', JSON.stringify(appState.bodyProfile));
+        }
+
+        function loadLocalCache() {
+            try {
+                const recs = localStorage.getItem('fit_records');
+                if (recs) appState.records = JSON.parse(recs);
+                
+                const custom = localStorage.getItem('fit_custom_ex');
+                if (custom) appState.customExercises = JSON.parse(custom);
+
+                const prof = localStorage.getItem('fit_profile');
+                if (prof) appState.bodyProfile = JSON.parse(prof);
+            } catch (e) {
+                console.error("Local cache load error:", e);
+            }
+        }
+
+
+        // ================= TAB 1: STRENGTH WORKOUT LOGIC =================
+
+        function renderMuscleChips() {
+            const container = document.getElementById('muscleChips');
+            container.innerHTML = '';
+            
+            const muscles = ["胸部", "背部", "腿部", "肩部", "手臂", "核心"];
+            muscles.forEach(m => {
+                const isActive = m === selectedMuscle;
+                const btn = document.createElement('button');
+                btn.className = `px-3.5 py-1.5 rounded-xl text-xs font-bold transition btn-active ${
+                    isActive ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/50' : 'bg-gray-900 border border-cardBorder text-gray-400 hover:text-white'
+                }`;
+                btn.innerText = m;
+                btn.onclick = () => {
+                    selectedMuscle = m;
+                    document.getElementById('selectedMuscleBadge').innerText = m;
+                    renderMuscleChips();
+                    renderExerciseChips();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderExerciseChips() {
+            const container = document.getElementById('exerciseChips');
+            container.innerHTML = '';
+
+            const presets = DEFAULT_MUSCLE_EXERCISES[selectedMuscle] || [];
+            const customs = appState.customExercises[selectedMuscle] || [];
+            const list = [...presets, ...customs];
+
+            if (!list.includes(selectedExercise) && list.length > 0) {
+                selectedExercise = list[0];
+            }
+
+            list.forEach(ex => {
+                const isActive = ex === selectedExercise;
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1 rounded-lg text-xs font-medium transition btn-active ${
+                    isActive ? 'bg-teal-600 text-white font-bold border border-teal-400/40' : 'bg-gray-900/90 border border-cardBorder text-gray-300 hover:border-gray-600'
+                }`;
+                btn.innerText = ex;
+                btn.onclick = () => {
+                    selectedExercise = ex;
+                    document.getElementById('customExerciseInput').value = '';
+                    renderExerciseChips();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function setBatchSets(count) {
+            batchSetsCount = count;
+            document.querySelectorAll('.batch-btn').forEach((b, i) => {
+                if (i + 1 === count) {
+                    b.className = "batch-btn px-2 py-0.5 text-xs rounded border border-emerald-500 bg-emerald-950 text-emerald-400 font-bold";
+                } else {
+                    b.className = "batch-btn px-2 py-0.5 text-xs rounded border border-cardBorder text-gray-300 font-medium";
+                }
+            });
+            document.getElementById('batchCountBadge').innerText = `${count}組`;
+        }
+
+        function adjustWeight(delta) {
+            const input = document.getElementById('inputWeight');
+            let val = parseFloat(input.value) || 0;
+            val = Math.max(0, val + delta);
+            input.value = val;
+        }
+
+        function adjustReps(delta) {
+            const input = document.getElementById('inputReps');
+            let val = parseInt(input.value) || 0;
+            val = Math.max(1, val + delta);
+            input.value = val;
+        }
+
+        function addSetsToPendingQueue() {
+            const customInput = document.getElementById('customExerciseInput').value.trim();
+            const exerciseName = customInput || selectedExercise || "自訂訓練";
+            const weight = parseFloat(document.getElementById('inputWeight').value) || 0;
+            const reps = parseInt(document.getElementById('inputReps').value) || 1;
+
+            // Find if exercise card already exists in today's pending queue
+            let exItem = appState.pendingQueue.find(i => i.exercise === exerciseName);
+            if (!exItem) {
+                exItem = {
+                    muscle: selectedMuscle,
+                    exercise: exerciseName,
+                    setsList: []
+                };
+                appState.pendingQueue.push(exItem);
+            }
+
+            // Batch add sets
+            for (let i = 0; i < batchSetsCount; i++) {
+                exItem.setsList.push({ weight, reps });
+            }
+
+            renderPendingQueue();
+        }
+
+        function addSingleSetToInCardQueue(exIndex, weight, reps) {
+            if (appState.pendingQueue[exIndex]) {
+                appState.pendingQueue[exIndex].setsList.push({ weight, reps });
+                renderPendingQueue();
+            }
+        }
+
+        function removeSetFromPendingQueue(exIndex, setIndex) {
+            if (appState.pendingQueue[exIndex]) {
+                appState.pendingQueue[exIndex].setsList.splice(setIndex, 1);
+                if (appState.pendingQueue[exIndex].setsList.length === 0) {
+                    appState.pendingQueue.splice(exIndex, 1);
+                }
+                renderPendingQueue();
+            }
+        }
+
+        function removeExerciseCardFromPendingQueue(exIndex) {
+            appState.pendingQueue.splice(exIndex, 1);
+            renderPendingQueue();
+        }
+
+        function renderPendingQueue() {
+            const section = document.getElementById('pendingQueueSection');
+            const listContainer = document.getElementById('pendingQueueList');
+            const badge = document.getElementById('pendingTotalSets');
+
+            if (appState.pendingQueue.length === 0) {
+                section.classList.add('hidden');
+                return;
+            }
+
+            section.classList.remove('hidden');
+            badge.innerText = `${appState.pendingQueue.length} 個動作待存`;
+            listContainer.innerHTML = '';
+
+            appState.pendingQueue.forEach((item, exIdx) => {
+                const card = document.createElement('div');
+                card.className = "bg-gray-900 border border-cardBorder rounded-xl p-3.5 space-y-3";
+
+                // Card Header
+                let setsListHtml = '';
+                item.setsList.forEach((st, sIdx) => {
+                    setsListHtml += `
+                        <div class="flex items-center justify-between bg-cardBg px-2.5 py-1.5 rounded-lg text-xs border border-cardBorder/60">
+                            <span class="text-gray-400 font-medium">第 ${sIdx + 1} 組</span>
+                            <span class="text-emerald-400 font-bold">${st.weight} <span class="text-[10px] text-gray-500">kg</span> × ${st.reps} <span class="text-[10px] text-gray-500">下</span></span>
+                            <button onclick="removeSetFromPendingQueue(${exIdx}, ${sIdx})" class="text-gray-500 hover:text-red-400 px-1 font-bold">×</button>
+                        </div>
+                    `;
+                });
+
+                // Latest set values for quick inline add
+                const lastSet = item.setsList[item.setsList.length - 1] || { weight: 60, reps: 10 };
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/40">${item.muscle}</span>
+                            <h3 class="text-sm font-bold text-white">${item.exercise}</h3>
+                        </div>
+                        <button onclick="removeExerciseCardFromPendingQueue(${exIdx})" class="text-xs text-gray-400 hover:text-red-400">刪除整個動作</button>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        ${setsListHtml}
+                    </div>
+
+                    <!-- In-Card Quick Add Inline Controls -->
+                    <div class="pt-2 border-t border-cardBorder/60 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="text-gray-400">預設:</span>
+                            <input type="number" id="cardW_${exIdx}" value="${lastSet.weight}" step="0.5" class="w-14 bg-cardBg border border-cardBorder rounded text-center text-emerald-400 font-bold py-0.5">
+                            <span class="text-gray-500">kg</span>
+                            <input type="number" id="cardR_${exIdx}" value="${lastSet.reps}" class="w-12 bg-cardBg border border-cardBorder rounded text-center text-teal-400 font-bold py-0.5">
+                            <span class="text-gray-500">下</span>
+                        </div>
+                        <button onclick="addSingleSetFromCard(${exIdx})" class="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-400 font-bold text-xs rounded-lg transition btn-active">
+                            ＋ 加一組
+                        </button>
+                    </div>
+                `;
+
+                listContainer.appendChild(card);
+            });
+        }
+
+        function addSingleSetFromCard(exIndex) {
+            const wEl = document.getElementById(`cardW_${exIndex}`);
+            const rEl = document.getElementById(`cardR_${exIndex}`);
+            const w = parseFloat(wEl.value) || 0;
+            const r = parseInt(rEl.value) || 1;
+            addSingleSetToInCardQueue(exIndex, w, r);
+        }
+
+        async function savePendingQueueToCloud() {
+            if (appState.pendingQueue.length === 0) return;
+
+            const selectedDate = document.getElementById('strengthDate').value || getTodayDateString();
+            const manualCals = parseFloat(document.getElementById('pendingCalories').value) || 0;
+            const userWeight = appState.bodyProfile.weight || 85;
+
+            // Merge items into main appState.records
+            appState.pendingQueue.forEach(pendingItem => {
+                // Calculate volume & estimated calories if manual cals not provided
+                let volume = 0;
+                pendingItem.setsList.forEach(s => volume += (s.weight * s.reps));
+                
+                const estCals = manualCals > 0 ? manualCals : Math.round((volume * 0.05) + (pendingItem.setsList.length * 4));
+
+                // Search if an entry for same date and exercise already exists in records
+                let existingRecord = appState.records.find(r => r.type === 'strength' && r.date === selectedDate && r.exercise === pendingItem.exercise);
+
+                if (existingRecord) {
+                    // Merge sets
+                    existingRecord.setsList = existingRecord.setsList.concat(pendingItem.setsList);
+                    existingRecord.calories = (existingRecord.calories || 0) + estCals;
+                } else {
+                    appState.records.unshift({
+                        id: `rec_${Date.now()}_${Math.random().toString(36).substring(2,6)}`,
+                        type: 'strength',
+                        date: selectedDate,
+                        muscle: pendingItem.muscle,
+                        exercise: pendingItem.exercise,
+                        setsList: pendingItem.setsList,
+                        calories: estCals
+                    });
+                }
+            });
+
+            // Clear Pending Queue
+            appState.pendingQueue = [];
+            document.getElementById('pendingCalories').value = '';
+            renderPendingQueue();
+
+            // Save and Push to Cloud
+            saveLocalCache();
+            renderHistory();
+            
+            try {
+                updateStatus('syncing', '正在上傳雲端...');
+                await pushToCloud();
+                const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                updateStatus('synced', `已同步 ${nowTime}`);
+                alert('✅ 今日訓練紀錄已順利儲存並即時同步到雲端！');
+            } catch (err) {
+                alert('⚠️ 紀錄已儲存於本機，但連線雲端時發生問題：' + err.message);
+                updateStatus('error', '雲端同步失敗');
+            }
+        }
+
+
+        // ================= TAB 2: OTHER SPORTS LOGIC =================
+
+        function renderSportsChips() {
+            const container = document.getElementById('sportsChips');
+            container.innerHTML = '';
+
+            OTHER_SPORTS_LIST.forEach(s => {
+                const isActive = s.name === selectedSportName;
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold transition btn-active ${
+                    isActive ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-900 border border-cardBorder text-gray-300 hover:text-white'
+                }`;
+                btn.innerText = `${s.icon} ${s.name}`;
+                btn.onclick = () => {
+                    selectedSportName = s.name;
+                    document.getElementById('customSportInput').value = '';
+                    renderSportsChips();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function setSportDuration(mins) {
+            document.getElementById('inputSportDuration').value = mins;
+            document.getElementById('sportDurationVal').innerText = `${mins} 分鐘`;
+        }
+
+        async function saveOtherSportToCloud() {
+            const date = document.getElementById('sportDate').value || getTodayDateString();
+            const customSport = document.getElementById('customSportInput').value.trim();
+            const sportName = customSport || selectedSportName || "有氧運動";
+            const duration = parseInt(document.getElementById('inputSportDuration').value) || 60;
+            const manualCals = parseFloat(document.getElementById('inputSportCalories').value) || 0;
+
+            const sportInfo = OTHER_SPORTS_LIST.find(s => s.name === sportName);
+            const met = sportInfo ? sportInfo.met : 6.0;
+            const userWeight = appState.bodyProfile.weight || 85;
+
+            // MET Formula: Calories = MET * Weight(kg) * Duration(hours)
+            const estCals = manualCals > 0 ? manualCals : Math.round(met * userWeight * (duration / 60));
+
+            appState.records.unshift({
+                id: `sport_${Date.now()}_${Math.random().toString(36).substring(2,6)}`,
+                type: 'sport',
+                date: date,
+                exercise: sportName,
+                duration: duration,
+                calories: estCals
+            });
+
+            saveLocalCache();
+            renderHistory();
+
+            try {
+                updateStatus('syncing', '正在上傳雲端...');
+                await pushToCloud();
+                const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                updateStatus('synced', `已同步 ${nowTime}`);
+                alert(`✅ 運動紀錄 [${sportName} ${duration}分鐘] 已順利同步雲端！`);
+            } catch (e) {
+                alert('⚠️ 已存於本機，雲端上傳失敗: ' + e.message);
+                updateStatus('error', '雲端同步失敗');
+            }
+        }
+
+
+        // ================= TAB 3: DATA HISTORY & CONSOLIDATION =================
+
+        function switchHistoryViewMode(mode) {
+            historyViewMode = mode;
+            const exBtn = document.getElementById('viewModeExerciseBtn');
+            const dateBtn = document.getElementById('viewModeDateBtn');
+            const filterBar = document.getElementById('historyMuscleFilterBar');
+
+            if (mode === 'exercise') {
+                exBtn.className = "flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow-md";
+                dateBtn.className = "flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-gray-400 hover:text-white";
+                filterBar.classList.remove('hidden');
+            } else {
+                dateBtn.className = "flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow-md";
+                exBtn.className = "flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-gray-400 hover:text-white";
+                filterBar.classList.add('hidden');
+            }
+
+            renderHistory();
+        }
+
+        function renderHistoryMuscleFilterChips() {
+            const container = document.getElementById('historyMuscleFilterBar');
+            container.innerHTML = '';
+
+            const list = ["ALL", "胸部", "背部", "腿部", "肩部", "手臂", "核心"];
+            list.forEach(m => {
+                const isActive = m === historyMuscleFilter;
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition ${
+                    isActive ? 'bg-teal-500 text-white' : 'bg-gray-900 border border-cardBorder text-gray-400'
+                }`;
+                btn.innerText = m === 'ALL' ? '全部部位' : m;
+                btn.onclick = () => {
+                    historyMuscleFilter = m;
+                    renderHistoryMuscleFilterChips();
+                    renderHistory();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderHistory() {
+            renderHistoryMuscleFilterChips();
+            const listContainer = document.getElementById('historyList');
+            listContainer.innerHTML = '';
+
+            // Update Header Stats
+            let totalRecords = appState.records.length;
+            let maxVol = 0;
+            let totalCals = 0;
+
+            appState.records.forEach(r => {
+                totalCals += (r.calories || 0);
+                if (r.type === 'strength' && r.setsList) {
+                    let vol = 0;
+                    r.setsList.forEach(s => vol += (s.weight * s.reps));
+                    if (vol > maxVol) maxVol = vol;
+                }
+            });
+
+            document.getElementById('statTotalCount').innerText = totalRecords;
+            document.getElementById('statMaxVolume').innerText = `${maxVol.toLocaleString()} kg`;
+            document.getElementById('statTotalCals').innerText = `${totalCals.toLocaleString()} kcal`;
+
+            if (appState.records.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-12 text-gray-500 space-y-2">
+                        <p class="text-4xl">🏋️</p>
+                        <p class="text-xs font-medium">尚無訓練紀錄，快去新增第一筆吧！</p>
+                    </div>
+                `;
+                return;
+            }
+
+            if (historyViewMode === 'exercise') {
+                renderConsolidatedByExercise(listContainer);
+            } else {
+                renderGroupedByDate(listContainer);
+            }
+        }
+
+        // Mode A: Grouped by Exercise Name (📋 依動作彙整)
+        function renderConsolidatedByExercise(container) {
+            const exerciseMap = new Map();
+
+            // Filter strength records
+            const strengthRecords = appState.records.filter(r => r.type === 'strength');
+
+            strengthRecords.forEach(r => {
+                if (historyMuscleFilter !== 'ALL' && r.muscle !== historyMuscleFilter) return;
+
+                if (!exerciseMap.has(r.exercise)) {
+                    exerciseMap.set(r.exercise, {
+                        exercise: r.exercise,
+                        muscle: r.muscle || '重訓',
+                        sessions: [],
+                        prWeight: 0,
+                        totalSetsCount: 0
+                    });
+                }
+
+                const exData = exerciseMap.get(r.exercise);
+                exData.sessions.push(r);
+
+                // Calculate PR weight and set counts
+                if (r.setsList) {
+                    r.setsList.forEach(s => {
+                        exData.totalSetsCount++;
+                        if (s.weight > exData.prWeight) {
+                            exData.prWeight = s.weight;
+                        }
+                    });
+                }
+            });
+
+            if (exerciseMap.size === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-500 text-xs">此肌群分類下無動作紀錄</div>`;
+                return;
+            }
+
+            Array.from(exerciseMap.values()).forEach(exGroup => {
+                const card = document.createElement('div');
+                card.className = "bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-3 shadow-md";
+
+                // Unique training days count
+                const uniqueDays = new Set(exGroup.sessions.map(s => s.date)).size;
+
+                // Sort sessions newest date first
+                exGroup.sessions.sort((a,b) => b.date.localeCompare(a.date));
+
+                let sessionsHtml = '';
+                exGroup.sessions.forEach(session => {
+                    let setStr = session.setsList.map((st, i) => `#${i+1} ${st.weight}kg×${st.reps}`).join('、');
+                    sessionsHtml += `
+                        <div class="bg-gray-900/80 p-2.5 rounded-xl border border-cardBorder/80 flex items-center justify-between text-xs gap-2">
+                            <div class="space-y-0.5 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-gray-300">${session.date}</span>
+                                    <span class="text-[10px] text-emerald-400 font-semibold bg-emerald-950 px-1.5 py-0.2 rounded">${session.setsList.length}組</span>
+                                </div>
+                                <p class="text-gray-400 text-[11px] font-mono truncate">${setStr}</p>
+                            </div>
+                            <button onclick="deleteSingleRecord('${session.id}')" class="text-gray-500 hover:text-red-400 text-xs px-2 py-1">刪除</button>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-2.5">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-teal-400 bg-teal-950 px-2 py-0.5 rounded border border-teal-800/40">${exGroup.muscle}</span>
+                            <h3 class="text-base font-bold text-white">${exGroup.exercise}</h3>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-amber-400 font-black flex items-center gap-1 justify-end">
+                                <span>🏆 PR: ${exGroup.prWeight} kg</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400">
+                                累計 ${uniqueDays} 天 / ${exGroup.totalSetsCount} 組
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        ${sessionsHtml}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // Mode B: Grouped by Date (📅 依日期檢視)
+        function renderGroupedByDate(container) {
+            const dateMap = new Map();
+
+            appState.records.forEach(r => {
+                if (!dateMap.has(r.date)) {
+                    dateMap.set(r.date, []);
+                }
+                dateMap.get(r.date).push(r);
+            });
+
+            const sortedDates = Array.from(dateMap.keys()).sort((a,b) => b.localeCompare(a));
+
+            sortedDates.forEach(date => {
+                const recs = dateMap.get(date);
+                let dayVolume = 0;
+                let dayCals = 0;
+
+                recs.forEach(r => {
+                    dayCals += (r.calories || 0);
+                    if (r.type === 'strength' && r.setsList) {
+                        r.setsList.forEach(s => dayVolume += (s.weight * s.reps));
+                    }
+                });
+
+                const card = document.createElement('div');
+                card.className = "bg-cardBg border border-cardBorder rounded-2xl p-4 space-y-3 shadow-md";
+
+                let itemsHtml = '';
+                recs.forEach(r => {
+                    if (r.type === 'strength') {
+                        let setStr = r.setsList.map((st, i) => `#${i+1} ${st.weight}kg×${st.reps}`).join('、');
+                        itemsHtml += `
+                            <div class="bg-gray-900/80 p-2.5 rounded-xl border border-cardBorder flex items-center justify-between text-xs">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-emerald-400 font-bold">[${r.muscle}] ${r.exercise}</span>
+                                        <span class="text-[10px] text-gray-400">${r.setsList.length}組</span>
+                                    </div>
+                                    <p class="text-gray-400 text-[11px] font-mono mt-0.5">${setStr}</p>
+                                </div>
+                                <button onclick="deleteSingleRecord('${r.id}')" class="text-gray-500 hover:text-red-400 px-1">刪除</button>
+                            </div>
+                        `;
+                    } else {
+                        itemsHtml += `
+                            <div class="bg-gray-900/80 p-2.5 rounded-xl border border-cardBorder flex items-center justify-between text-xs">
+                                <div>
+                                    <span class="text-teal-400 font-bold">🏐 ${r.exercise}</span>
+                                    <span class="text-gray-400 ml-2">${r.duration} 分鐘 (${r.calories} kcal)</span>
+                                </div>
+                                <button onclick="deleteSingleRecord('${r.id}')" class="text-gray-500 hover:text-red-400 px-1">刪除</button>
+                            </div>
+                        `;
+                    }
+                });
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-2">
+                        <span class="text-sm font-bold text-white">📅 ${date}</span>
+                        <span class="text-xs text-gray-400">當日總容量: <strong class="text-emerald-400">${dayVolume} kg</strong> | ${dayCals} kcal</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${itemsHtml}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        async function deleteSingleRecord(id) {
+            if (!confirm('確定要刪除這筆訓練紀錄嗎？')) return;
+
+            appState.records = appState.records.filter(r => r.id !== id);
+            saveLocalCache();
+            renderHistory();
+
+            try {
+                updateStatus('syncing', '正在更新雲端...');
+                await pushToCloud();
+                const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                updateStatus('synced', `已同步 ${nowTime}`);
+            } catch (e) {
+                updateStatus('error', '刪除後同步失敗');
+            }
+        }
+
+
+        // ================= TAB NAVIGATION =================
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.space-block').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            const navs = ['strength', 'sports', 'history'];
+            navs.forEach(t => {
+                const btn = document.getElementById(`nav-${t}`);
+                if (t === tabId) {
+                    btn.className = "flex flex-col items-center gap-1 py-1 text-emerald-400 transition btn-active font-bold";
+                } else {
+                    btn.className = "flex flex-col items-center gap-1 py-1 text-gray-500 hover:text-gray-300 transition btn-active";
+                }
+            });
+
+            if (tabId === 'history') {
+                renderHistory();
+            }
+        }
+
+
+        // ================= MODAL MANAGERS =================
+
+        function openModal(id) {
+            if (id === 'cloudModal') updateCloudModalInputs();
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function updateCloudModalInputs() {
+            document.getElementById('modalDbUrl').value = appState.dbUrl;
+            document.getElementById('modalSyncKey').value = appState.syncKey;
+            document.getElementById('modalLastSyncTime').innerText = appState.lastSynced || '無記錄';
+        }
+
+        async function saveCloudSettingsModal() {
+            const rawUrl = document.getElementById('modalDbUrl').value;
+            const rawKey = document.getElementById('modalSyncKey').value;
+
+            appState.dbUrl = sanitizeDbUrl(rawUrl);
+            appState.syncKey = sanitizeSyncKey(rawKey);
+
+            localStorage.setItem('fit_dbUrl', appState.dbUrl);
+            localStorage.setItem('fit_syncKey', appState.syncKey);
+
+            closeModal('cloudModal');
+            document.getElementById('modalDiagnostics').classList.add('hidden');
+
+            alert(`✅ 連線資訊已更新！\n資料庫網址: ${appState.dbUrl}\n同步密鑰: ${appState.syncKey}\n系統正在為您進行雙向數據同步...`);
+            await syncFromCloud(true);
+        }
+
+        function resetToDefaultCloudSettings() {
+            document.getElementById('modalDbUrl').value = DEFAULT_DB_URL;
+            document.getElementById('modalSyncKey').value = DEFAULT_SYNC_KEY;
+            saveCloudSettingsModal();
+        }
+
+        function copyShareableSyncUrl() {
+            const baseUrl = window.location.href.split('?')[0];
+            const shareUrl = `${baseUrl}?db=${encodeURIComponent(appState.dbUrl)}&key=${encodeURIComponent(appState.syncKey)}`;
+            
+            copyTextToClipboard(shareUrl);
+            alert("✅ 已複製快速同步網址至剪貼簿！在其他手機上打開此網址即可自動帶入此密鑰。");
+        }
+
+        // Custom Exercise Management
+        function renderCustomExercisesList() {
+            const container = document.getElementById('customExercisesList');
+            container.innerHTML = '';
+
+            let hasAny = false;
+            Object.keys(appState.customExercises).forEach(m => {
+                (appState.customExercises[m] || []).forEach(ex => {
+                    hasAny = true;
+                    const row = document.createElement('div');
+                    row.className = "flex items-center justify-between bg-gray-900 px-3 py-1.5 rounded-lg text-xs";
+                    row.innerHTML = `
+                        <span><strong class="text-emerald-400">[${m}]</strong> ${ex}</span>
+                        <button onclick="removeCustomExercise('${m}', '${ex}')" class="text-gray-500 hover:text-red-400">刪除</button>
+                    `;
+                    container.appendChild(row);
+                });
+            });
+
+            if (!hasAny) {
+                container.innerHTML = `<p class="text-[11px] text-gray-500">尚無自訂器材項目</p>`;
+            }
+        }
+
+        async function addNewCustomExercise() {
+            const muscle = document.getElementById('newEquipMuscle').value;
+            const name = document.getElementById('newEquipName').value.trim();
+
+            if (!name) return alert('請輸入動作名稱');
+
+            if (!appState.customExercises[muscle]) {
+                appState.customExercises[muscle] = [];
+            }
+            if (!appState.customExercises[muscle].includes(name)) {
+                appState.customExercises[muscle].push(name);
+            }
+
+            document.getElementById('newEquipName').value = '';
+            saveLocalCache();
+            renderCustomExercisesList();
+            renderExerciseChips();
+
+            try {
+                await pushToCloud();
+            } catch (e) {}
+        }
+
+        async function removeCustomExercise(muscle, name) {
+            if (appState.customExercises[muscle]) {
+                appState.customExercises[muscle] = appState.customExercises[muscle].filter(i => i !== name);
+                saveLocalCache();
+                renderCustomExercisesList();
+                renderExerciseChips();
+                try { await pushToCloud(); } catch (e) {}
+            }
+        }
+
+        // Body Profile
+        async function saveBodyProfile() {
+            const h = parseFloat(document.getElementById('userHeight').value) || 186;
+            const w = parseFloat(document.getElementById('userWeight').value) || 85;
+
+            appState.bodyProfile = { height: h, weight: w };
+            saveLocalCache();
+            closeModal('profileModal');
+            alert('✅ 身體參數已儲存！');
+
+            try { await pushToCloud(); } catch (e) {}
+        }
+
+        // Backup & Restore
+        function copyJsonBackupToClipboard() {
+            const dataStr = JSON.stringify(appState, null, 2);
+            copyTextToClipboard(dataStr);
+            alert('📋 已成功將備份 JSON 文字複製到剪貼簿！');
+        }
+
+        function downloadBackupFile() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `fitness_backup_${getTodayDateString()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        async function importJsonBackupText() {
+            const jsonStr = document.getElementById('importJsonText').value.trim();
+            if (!jsonStr) return alert('請先貼上備份 JSON 文字');
+
+            try {
+                const parsed = JSON.parse(jsonStr);
+                const standardized = parseAndStandardizeCloudData(parsed);
+
+                if (standardized.length === 0) {
+                    return alert('⚠️ 備份格式無法解析出有效的紀錄');
+                }
+
+                mergeRecords(standardized);
+                if (parsed.customExercises) appState.customExercises = { ...appState.customExercises, ...parsed.customExercises };
+                if (parsed.bodyProfile) appState.bodyProfile = { ...appState.bodyProfile, ...parsed.bodyProfile };
+
+                saveLocalCache();
+                renderHistory();
+                closeModal('backupModal');
+
+                alert(`✅ 成功還原 ${standardized.length} 筆訓練紀錄！正在同步至雲端...`);
+                await pushToCloud();
+                updateStatus('synced', '已還原並同步雲端');
+            } catch (err) {
+                alert('⚠️ 備份解析失敗，請確認 JSON 格式是否完整正確：' + err.message);
+            }
+        }
+
+        // Universal Clipboard Helper for iframe compatibility
+        function copyTextToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
+            document.body.removeChild(textarea);
+        }
+    </script>
 </body>
 </html>
